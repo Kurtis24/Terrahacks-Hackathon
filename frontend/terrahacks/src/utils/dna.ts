@@ -35,8 +35,8 @@ export function renderSingleStrandDNA(
 
   // Geometries
   const sugarGeometry = new THREE.SphereGeometry(0.8, 32, 32); // Sphere for pentose sugar
-  const baseGeometry = new THREE.CylinderGeometry(0.4, 0.4, 2, 32); // Smaller cylinder for nitrogenous bases
-  const connectionGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 16); // Thin cylinder for connections
+  const baseGeometry = new THREE.CylinderGeometry(0.4, 0.4, 3, 32); // Smaller cylinder for nitrogenous bases
+  const connectionGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1, 16); // Thin cylinder for connections
 
   // Materials for different nucleotides
   const sugarMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White for sugar

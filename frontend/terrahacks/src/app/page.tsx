@@ -59,10 +59,16 @@ Base paired example:
             spellCheck={false}
             autoComplete="off"
             autoCorrect="off"
-            autoCapitalize="off"
+            autoCapitalize="none"
             onKeyDown={(e) => {
               // Ensure copy/paste shortcuts work
-              if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v' || e.key === 'x' || e.key === 'a')) {
+              if (
+                (e.ctrlKey || e.metaKey) &&
+                (e.key === "c" ||
+                  e.key === "v" ||
+                  e.key === "x" ||
+                  e.key === "a")
+              ) {
                 e.stopPropagation();
               }
             }}

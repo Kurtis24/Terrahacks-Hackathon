@@ -1,0 +1,62 @@
+# ========================
+# Basic Git Ignore Template
+# ========================
+
+# Environment variables
+.env
+.env.*
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependency directories
+node_modules/
+vendor/
+__pycache__/
+.venv/
+venv/
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Build outputs
+dist/
+build/
+tmp/
+temp/
+*.egg-info/
+*.pyc
+*.pyo
+*.pyd
+
+# Test results and coverage
+coverage/
+*.cover
+*.lcov
+.nyc_output/
+
+# Misc
+*.bak
+*.orig
+*.old
+
+# Git
+*.rej
+*.patch
+*.diff
+
+# Secrets or keys
+*.pem
+*.key
+*.crt

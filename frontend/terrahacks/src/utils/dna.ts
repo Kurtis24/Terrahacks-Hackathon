@@ -18,7 +18,10 @@ export function renderSingleStrandDNA(
     0.1,
     1000
   );
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: "high-performance", // Prefer high performance GPU
+  });
 
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.appendChild(renderer.domElement);
@@ -33,10 +36,10 @@ export function renderSingleStrandDNA(
   controls.enableRotate = true;
   controls.enablePan = true;
 
-  // Geometries
-  const sugarGeometry = new THREE.SphereGeometry(0.8, 32, 32); // Sphere for pentose sugar
-  const baseGeometry = new THREE.CylinderGeometry(0.4, 0.4, 3, 32); // Smaller cylinder for nitrogenous bases
-  const connectionGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1, 16); // Thin cylinder for connections
+  // Optimized geometries with lower detail for better performance
+  const sugarGeometry = new THREE.SphereGeometry(0.8, 16, 16); // Reduced from 32x32 to 16x16
+  const baseGeometry = new THREE.CylinderGeometry(0.4, 0.4, 3, 16); // Reduced from 32 to 16
+  const connectionGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1, 8); // Reduced from 16 to 8
 
   // Materials for different nucleotides
   const sugarMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White for sugar
@@ -53,22 +56,26 @@ export function renderSingleStrandDNA(
   // Store nucleotide positions and their array coordinates for proper path connections
   const nucleotideData: {
     position: THREE.Vector3;
+    originalPosition: THREE.Vector3; // Store original position for subtle movement
     row: number;
     col: number;
     type: number; // Original type (1-4 or 11-14)
     baseType: number; // Base type (1-4)
     isDoubleDNA: boolean; // Whether this is double-digit DNA
     nucleotideGroup: THREE.Object3D; // Store reference to the nucleotide group for rotation
-    rotationSpeed: { x: number; y: number; z: number }; // Individual rotation speeds for breeze effect
+    rotationSpeed: { x: number; y: number; z: number }; // Base rotation speeds
+    waveOffset: number; // Wave offset for synchronized animation
     isPaired: boolean; // Flag to indicate if this nucleotide is part of a base pair
   }[] = [];
 
-  // Variables for mouse interaction
-  const raycaster = new THREE.Raycaster();
-  const mouse = new THREE.Vector2();
-  let isDragging = false;
-  let selectedNucleotide: THREE.Object3D | null = null;
-  let previousMousePosition = { x: 0, y: 0 };
+  // Pre-calculate constants for animation to avoid repeated calculations
+  const TIME_SCALE = 0.001;
+  const WAVE_SPEED = 0.5;
+  const POSITION_AMPLITUDE = 0.3;
+  const PHASE_OFFSET_Y = Math.PI / 4;
+  const PHASE_OFFSET_Z = Math.PI / 2;
+  const PHASE_OFFSET_POS_Y = Math.PI / 3;
+  const PHASE_OFFSET_POS_Z = Math.PI / 6;
 
   // First pass: Create all nucleotides and store their data
   for (let row = 0; row < dnaArray.length; row++) {
@@ -94,19 +101,22 @@ export function renderSingleStrandDNA(
 
       // Create sugar backbone (sphere)
       const sugar = new THREE.Mesh(sugarGeometry, sugarMaterial);
-      sugar.userData = { type: "sugar", nucleotideGroup }; // Store reference for raycasting
       nucleotideGroup.add(sugar);
 
-      // Generate random rotation speeds for gentle breeze effect
+      // Generate wave-based rotation speeds for synchronized wave effect
       const rotationSpeed = {
-        x: (Math.random() - 0.5) * 0.02, // Very slow rotation around X axis
-        y: (Math.random() - 0.5) * 0.02, // Very slow rotation around Y axis
-        z: (Math.random() - 0.5) * 0.02, // Even slower rotation around Z axis
+        x: 0.0, // no speed
+        y: 1,
+        z: 1,
       };
+
+      // Calculate wave offset based on position for synchronized wave effect
+      const waveOffset = posX * 0.02 + posY * 0.02; // Simplified wave pattern based on position
 
       // Store nucleotide data with group reference and rotation speed
       nucleotideData.push({
         position,
+        originalPosition: position.clone(), // Store original position
         row,
         col,
         type: nucleotideType, // Keep original type (single or double digit)
@@ -114,6 +124,7 @@ export function renderSingleStrandDNA(
         isDoubleDNA, // Whether this is a double-digit nucleotide
         nucleotideGroup,
         rotationSpeed,
+        waveOffset, // Store wave offset
         isPaired: false, // Initialize as unpaired, will be updated when base pairs are found
       });
 
@@ -280,10 +291,6 @@ export function renderSingleStrandDNA(
       }
 
       const base = new THREE.Mesh(baseGeometry, baseMaterial);
-      base.userData = {
-        type: "base",
-        nucleotideGroup: current.nucleotideGroup,
-      };
 
       // Position base offset toward partner (inward)
       const baseOffset = baseDirection.clone().multiplyScalar(1.5);
@@ -406,10 +413,6 @@ export function renderSingleStrandDNA(
       }
 
       const base = new THREE.Mesh(baseGeometry, baseMaterial);
-      base.userData = {
-        type: "base",
-        nucleotideGroup: current.nucleotideGroup,
-      };
 
       // Position base offset from sugar in perpendicular direction (relative to nucleotide group)
       const baseOffset = perpendicular.clone().multiplyScalar(1.5);
@@ -515,80 +518,57 @@ export function renderSingleStrandDNA(
   holder.add(dnaStrand);
   scene.add(holder);
 
-  // Mouse interaction handlers for individual nucleotide rotation
-  const onMouseDown = (event: MouseEvent) => {
-    event.preventDefault();
+  // Animation loop (optimized for performance)
+  let lastTime = 0;
+  const targetFPS = 60;
+  const frameInterval = 1000 / targetFPS;
 
-    // Calculate mouse position in normalized device coordinates
-    const rect = renderer.domElement.getBoundingClientRect();
-    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    // Perform raycasting to find intersected objects
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(dnaStrand.children, true);
-
-    if (intersects.length > 0) {
-      const intersected = intersects[0].object as THREE.Mesh;
-      if (intersected.userData.nucleotideGroup) {
-        selectedNucleotide = intersected.userData.nucleotideGroup;
-        isDragging = true;
-        previousMousePosition = { x: event.clientX, y: event.clientY };
-
-        // Disable OrbitControls while dragging nucleotide
-        controls.enabled = false;
-
-        // Prevent the event from bubbling to OrbitControls
-        event.stopPropagation();
-      }
-    }
-  };
-
-  const onMouseMove = (event: MouseEvent) => {
-    if (!isDragging || !selectedNucleotide) return;
-
-    event.preventDefault();
-
-    // Calculate mouse movement
-    const deltaX = event.clientX - previousMousePosition.x;
-    const deltaY = event.clientY - previousMousePosition.y;
-
-    // Convert mouse movement to rotation
-    const rotationSpeed = 0.01;
-    selectedNucleotide.rotation.y += deltaX * rotationSpeed;
-    selectedNucleotide.rotation.x += deltaY * rotationSpeed;
-
-    previousMousePosition = { x: event.clientX, y: event.clientY };
-  };
-
-  const onMouseUp = () => {
-    isDragging = false;
-    selectedNucleotide = null;
-    controls.enabled = true; // Re-enable OrbitControls
-  };
-
-  // Add event listeners
-  renderer.domElement.addEventListener("mousedown", onMouseDown);
-  renderer.domElement.addEventListener("mousemove", onMouseMove);
-  renderer.domElement.addEventListener("mouseup", onMouseUp);
-  renderer.domElement.addEventListener("mouseleave", onMouseUp); // Handle mouse leaving canvas
-
-  // Animation loop (with gentle breeze rotation)
-  function animate() {
+  function animate(currentTime: number = 0) {
     requestAnimationFrame(animate);
 
-    // Apply gentle breeze rotation to each nucleotide
-    nucleotideData.forEach((nucleotide) => {
-      // Only apply automatic rotation if this nucleotide is not being manually dragged AND is not part of a base pair
-      if (
-        nucleotide.nucleotideGroup !== selectedNucleotide &&
-        !nucleotide.isPaired
-      ) {
-        nucleotide.nucleotideGroup.rotation.x += nucleotide.rotationSpeed.x;
-        nucleotide.nucleotideGroup.rotation.y += nucleotide.rotationSpeed.y;
-        nucleotide.nucleotideGroup.rotation.z += nucleotide.rotationSpeed.z;
+    // Throttle to target FPS for consistent performance
+    if (currentTime - lastTime < frameInterval) {
+      return;
+    }
+    lastTime = currentTime;
+
+    // Get current time for wave animation (calculate once)
+    const time = currentTime * TIME_SCALE;
+
+    // Apply synchronized wave rotation and position to each nucleotide
+    for (let i = 0; i < nucleotideData.length; i++) {
+      const nucleotide = nucleotideData[i];
+
+      // Pre-calculate common values
+      const baseWave = time + nucleotide.waveOffset;
+      const sinBase = Math.sin(baseWave);
+      const sinY = Math.sin(baseWave + PHASE_OFFSET_Y);
+      const sinZ = Math.sin(baseWave + PHASE_OFFSET_Z);
+
+      // Apply wave rotation (only if not paired to maintain bonds)
+      if (!nucleotide.isPaired) {
+        nucleotide.nucleotideGroup.rotation.x =
+          sinBase * nucleotide.rotationSpeed.x;
+        nucleotide.nucleotideGroup.rotation.y =
+          sinY * nucleotide.rotationSpeed.y;
+        nucleotide.nucleotideGroup.rotation.z =
+          sinZ * nucleotide.rotationSpeed.z;
       }
-    });
+
+      // Apply subtle position movement
+      const posWaveTime = time * WAVE_SPEED + nucleotide.waveOffset;
+      const posX =
+        nucleotide.originalPosition.x +
+        Math.sin(posWaveTime) * POSITION_AMPLITUDE;
+      const posY =
+        nucleotide.originalPosition.y +
+        Math.sin(posWaveTime + PHASE_OFFSET_POS_Y) * POSITION_AMPLITUDE;
+      const posZ =
+        nucleotide.originalPosition.z +
+        Math.sin(posWaveTime + PHASE_OFFSET_POS_Z) * POSITION_AMPLITUDE * 0.5;
+
+      nucleotide.nucleotideGroup.position.set(posX, posY, posZ);
+    }
 
     controls.update(); // Update controls for damping
     renderer.render(scene, camera);
@@ -608,10 +588,6 @@ export function renderSingleStrandDNA(
 
   return () => {
     window.removeEventListener("resize", handleResize);
-    renderer.domElement.removeEventListener("mousedown", onMouseDown);
-    renderer.domElement.removeEventListener("mousemove", onMouseMove);
-    renderer.domElement.removeEventListener("mouseup", onMouseUp);
-    renderer.domElement.removeEventListener("mouseleave", onMouseUp);
     controls.dispose(); // Clean up controls
     container.innerHTML = "";
   };

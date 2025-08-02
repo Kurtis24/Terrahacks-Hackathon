@@ -21,7 +21,7 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     # Create unique filenames with timestamp
     timestamp = int(time.time())
     output_filename = f"snake_pattern_{shape_name}_{timestamp}.png"
-    json_filename = f"path.json"
+    json_filename = f"../frontend/terrahacks/public/path.json"
     
     # Print detailed analysis
     print(f"\n📊 ALGORITHM RESULTS:")

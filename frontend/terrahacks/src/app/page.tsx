@@ -2,26 +2,41 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { renderSingleStrandDNA } from "../utils/dna";
+import { ParsePath } from "../utils/parser";
 
 export default function Home() {
-  const [inputString, setInputString] = useState(
-    "1,1,1,1,0,0,0\n2,0,0,1,0,0,0\n4,0,0,1,0,0,0\n1,0,0,3,1,2,1\n2,0,0,0,0,0,3\n0,0,0,0,0,0,2\n1,2,3,1,3,2,1\n12,11,14,12,14,11,12"
-  );
+  const [dnaArray, setDnaArray] = useState<number[][]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const parseInput = (input: string): number[][] => {
-    return input
-      .split("\n")
-      .map((row) => row.split(",").map((cell) => parseInt(cell.trim()) || 0));
-  };
+  const loadPathData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const pathData = await ParsePath();
+      setDnaArray(pathData);
+    } catch (err) {
+      console.error("Error loading path data:", err);
+      setError(err instanceof Error ? err.message : "Failed to load path data");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const renderDNA = useCallback(() => {
-    try {
-      const dnaArray = parseInput(inputString);
-      renderSingleStrandDNA(dnaArray, "dna-container");
-    } catch (error) {
-      console.error("Error parsing DNA input:", error);
+    if (dnaArray.length > 0) {
+      try {
+        renderSingleStrandDNA(dnaArray, "dna-container");
+      } catch (error) {
+        console.error("Error rendering DNA:", error);
+        setError("Failed to render DNA visualization");
+      }
     }
-  }, [inputString]);
+  }, [dnaArray]);
+
+  useEffect(() => {
+    loadPathData();
+  }, [loadPathData]);
 
   useEffect(() => {
     renderDNA();
@@ -31,57 +46,48 @@ export default function Home() {
     <div className="min-h-screen bg-gray-100 p-8">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold mb-6 text-center">
-          Single Strand DNA Renderer
+          Snake Path DNA Renderer
         </h1>
 
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">DNA Sequence Input</h2>
+          <h2 className="text-xl font-semibold mb-4">Path Data Controls</h2>
           <p className="text-sm text-gray-600 mb-4">
-            Enter a 2D array where: 0=nothing, 1=adenine(red), 2=thymine(blue),
-            3=cytosine(green), 4=guanine(yellow). Double-digit nucleotides
-            (11-14) will pair with single-digit ones (1-4) using complementary
-            base pairing (A-T, C-G). Paired nucleotides will be connected with
-            gray bonds and won&apos;t spin.
+            DNA sequence generated from snake path coordinates: 0=nothing,
+            1=adenine(red), 2=thymine(blue), 3=cytosine(green),
+            4=guanine(yellow). The path coordinates are converted to nucleotide
+            sequences with random values 1-4 at snake positions.
           </p>
 
-          <textarea
-            value={inputString}
-            onChange={(e) => setInputString(e.target.value)}
-            className="w-full h-32 p-3 border border-gray-300 rounded-md font-mono text-sm"
-            placeholder="Single strand example:
-1,0,0,0
-2,0,0,0
-3,0,0,0
+          <div className="flex gap-4 items-center">
+            <button
+              onClick={loadPathData}
+              disabled={isLoading}
+              className="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors disabled:bg-gray-400"
+            >
+              {isLoading ? "Loading..." : "Reload Path Data"}
+            </button>
 
-Base paired example:
-1,2,3,4
-11,12,13,14"
-            spellCheck={false}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="none"
-            onKeyDown={(e) => {
-              // Ensure copy/paste shortcuts work
-              if (
-                (e.ctrlKey || e.metaKey) &&
-                (e.key === "c" ||
-                  e.key === "v" ||
-                  e.key === "x" ||
-                  e.key === "a")
-              ) {
-                e.stopPropagation();
-              }
-            }}
-            onSelect={(e) => e.stopPropagation()}
-            onFocus={(e) => e.stopPropagation()}
-          />
+            <button
+              onClick={renderDNA}
+              disabled={dnaArray.length === 0}
+              className="px-6 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors disabled:bg-gray-400"
+            >
+              Re-render DNA
+            </button>
 
-          <button
-            onClick={renderDNA}
-            className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-          >
-            Render DNA
-          </button>
+            <div className="text-sm text-gray-600">
+              Grid size:{" "}
+              {dnaArray.length > 0
+                ? `${dnaArray.length} × ${dnaArray[0]?.length || 0}`
+                : "Not loaded"}
+            </div>
+          </div>
+
+          {error && (
+            <div className="mt-4 p-3 bg-red-100 border border-red-300 rounded-md text-red-700">
+              Error: {error}
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-6">

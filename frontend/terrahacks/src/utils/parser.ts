@@ -6,18 +6,27 @@ interface PathData {
     algorithm_version: string;
   };
   line_coordinates: {
-    green_lines: {
+    snake_lines: {
+      description: string;
+      colors: string[];
+      snake_types: string[];
+      total_pixels: number;
+      coordinates: [number, number][];
+    };
+    pink_lines: {
       color: string;
       snake_type: string;
       total_pixels: number;
       coordinates: [number, number][];
     };
-    red_lines: {
-      color: string;
-      snake_type: string;
-      total_pixels: number;
-      coordinates: [number, number][];
-    };
+  };
+  summary: {
+    grid_dimensions: string;
+    total_green_pixels: number;
+    total_red_pixels: number;
+    total_snake_pixels: number;
+    total_pink_pixels: number;
+    total_line_pixels: number;
   };
 }
 
@@ -36,18 +45,29 @@ export async function ParsePath(): Promise<number[][]> {
       .fill(null)
       .map(() => Array(300).fill(0));
 
-    // Helper function to generate random number from 1 to 4
-    const getRandomValue = (): number => Math.floor(Math.random() * 4) + 1;
+    // Helper function to generate random number from 1 to 4 (for snake lines)
+    const getRandomSnakeValue = (): number => Math.floor(Math.random() * 4) + 1;
 
-    // Combine left and right snake coordinates into a single array
-    const leftSnakeCoords = pathData.line_coordinates.green_lines.coordinates;
-    const rightSnakeCoords = pathData.line_coordinates.red_lines.coordinates;
-    const allCoordinates = [...leftSnakeCoords, ...rightSnakeCoords];
+    // Helper function to generate random number from 11 to 14 (for pink lines)
+    const getRandomPinkValue = (): number => Math.floor(Math.random() * 4) + 11;
 
-    // Process all coordinates (both left and right snakes combined)
-    for (const [x, y] of allCoordinates) {
+    // Get snake coordinates (combined green and red lines)
+    const snakeCoords = pathData.line_coordinates.snake_lines.coordinates;
+
+    // Get pink branch coordinates
+    const pinkCoords = pathData.line_coordinates.pink_lines.coordinates;
+
+    // Process snake coordinates with single digit values (1-4)
+    for (const [x, y] of snakeCoords) {
       if (x >= 0 && x < 300 && y >= 0 && y < 300) {
-        grid[y][x] = getRandomValue();
+        grid[y][x] = getRandomSnakeValue();
+      }
+    }
+
+    // Process pink coordinates with double digit values (11-14)
+    for (const [x, y] of pinkCoords) {
+      if (x >= 0 && x < 300 && y >= 0 && y < 300) {
+        grid[y][x] = getRandomPinkValue();
       }
     }
 

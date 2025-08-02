@@ -16,7 +16,7 @@ export function renderSingleStrandDNA(
     75,
     container.clientWidth / container.clientHeight,
     0.1,
-    1000
+    2000 // Increased far clipping plane from 1000 to 2000
   );
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -26,7 +26,7 @@ export function renderSingleStrandDNA(
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.appendChild(renderer.domElement);
 
-  camera.position.z = 35;
+  camera.position.z = 50; // Moved closer from
 
   // Add OrbitControls for user interaction
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -43,7 +43,11 @@ export function renderSingleStrandDNA(
 
   // Materials for different nucleotides
   const sugarMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White for sugar
+  const pinkSugarMaterial = new THREE.MeshBasicMaterial({ color: 0xff00ff }); // Bright pink for double-digit nucleotides
   const connectionMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White for connections
+  const pinkConnectionMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff00ff,
+  }); // Pink for connections to collision nucleotides
   const basePairMaterial = new THREE.MeshBasicMaterial({ color: 0x888888 }); // Gray for base pair connections
   const adenineMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Red for adenine
   const thymineMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff }); // Blue for thymine
@@ -100,7 +104,10 @@ export function renderSingleStrandDNA(
       nucleotideGroup.position.copy(position);
 
       // Create sugar backbone (sphere)
-      const sugar = new THREE.Mesh(sugarGeometry, sugarMaterial);
+      const sugar = new THREE.Mesh(
+        sugarGeometry,
+        isDoubleDNA ? pinkSugarMaterial : sugarMaterial
+      );
       nucleotideGroup.add(sugar);
 
       // Generate wave-based rotation speeds for synchronized wave effect
@@ -200,12 +207,7 @@ export function renderSingleStrandDNA(
 
     // Helper function to check if two base types are complementary
     const areComplementary = (baseType1: number, baseType2: number) => {
-      return (
-        (baseType1 === 1 && baseType2 === 2) || // Adenine pairs with Thymine
-        (baseType1 === 2 && baseType2 === 1) || // Thymine pairs with Adenine
-        (baseType1 === 3 && baseType2 === 4) || // Cytosine pairs with Guanine
-        (baseType1 === 4 && baseType2 === 3)
-      ); // Guanine pairs with Cytosine
+      return true; // Guanine pairs with Cytosine
     };
 
     // Look for complementary base pairs between single and double-digit nucleotides
@@ -395,7 +397,9 @@ export function renderSingleStrandDNA(
 
       // Create nitrogenous base oriented perpendicular to strand direction
       let baseMaterial;
-      switch (current.type) {
+      switch (
+        current.baseType // Use baseType instead of type so 11->1, 12->2, etc.
+      ) {
         case 1:
           baseMaterial = adenineMaterial;
           break;
@@ -485,11 +489,14 @@ export function renderSingleStrandDNA(
           .subVectors(other.position, current.position)
           .normalize();
 
+        // Use pink connection material if either nucleotide is a collision nucleotide
+        const connectionMat =
+          current.isDoubleDNA || other.isDoubleDNA
+            ? pinkConnectionMaterial
+            : connectionMaterial;
+
         // Create connection cylinder
-        const connection = new THREE.Mesh(
-          connectionGeometry,
-          connectionMaterial
-        );
+        const connection = new THREE.Mesh(connectionGeometry, connectionMat);
 
         // Scale to match distance
         connection.scale.y = distance;
@@ -513,10 +520,44 @@ export function renderSingleStrandDNA(
     }
   }
 
-  // Center the DNA strand
-  dnaStrand.position.y = 0;
+  // Center the DNA strand based on actual nucleotide positions
+  if (nucleotideData.length > 0) {
+    // Calculate bounding box of all nucleotides
+    let minX = Infinity,
+      maxX = -Infinity;
+    let minY = Infinity,
+      maxY = -Infinity;
+    let minZ = Infinity,
+      maxZ = -Infinity;
+
+    nucleotideData.forEach((nuc) => {
+      minX = Math.min(minX, nuc.position.x);
+      maxX = Math.max(maxX, nuc.position.x);
+      minY = Math.min(minY, nuc.position.y);
+      maxY = Math.max(maxY, nuc.position.y);
+      minZ = Math.min(minZ, nuc.position.z);
+      maxZ = Math.max(maxZ, nuc.position.z);
+    });
+
+    // Calculate center offset
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const centerZ = (minZ + maxZ) / 2;
+
+    // Apply centering offset to the DNA strand
+    dnaStrand.position.set(-centerX, -centerY, -centerZ);
+  } else {
+    // Fallback to original centering
+    dnaStrand.position.y = 0;
+  }
+
   holder.add(dnaStrand);
   scene.add(holder);
+
+  // Reset camera position and controls to center on the DNA structure
+  camera.position.set(0, 0, 20); // Updated from 35 to 20
+  controls.target.set(0, 0, 0);
+  controls.update();
 
   // Animation loop (optimized for performance)
   let lastTime = 0;

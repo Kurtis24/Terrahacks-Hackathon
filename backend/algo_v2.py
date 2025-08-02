@@ -21,6 +21,10 @@ Usage:
 - The script includes multiple test shapes (triangle, hexagon, square, circle)
 """
 
+# Set matplotlib backend to non-interactive before any other matplotlib imports
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for thread safety
+
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt

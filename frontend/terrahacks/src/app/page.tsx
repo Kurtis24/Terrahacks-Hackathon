@@ -1,116 +1,130 @@
-import Image from "next/image";
-import Link from "next/link";
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { renderSingleStrandDNA } from "../utils/dna";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [inputString, setInputString] = useState(
+    "1,1,1,1,0,0,0\n2,0,0,1,0,0,0\n4,0,0,1,0,0,0\n1,0,0,3,1,2,1\n2,0,0,0,0,0,3\n0,0,0,0,0,0,2\n1,2,3,1,3,2,1\n12,11,14,12,14,11,12"
+  );
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <Link
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-blue-600 text-white gap-2 hover:bg-blue-700 font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="/three"
+  const parseInput = (input: string): number[][] => {
+    return input
+      .split("\n")
+      .map((row) => row.split(",").map((cell) => parseInt(cell.trim()) || 0));
+  };
+
+  const renderDNA = useCallback(() => {
+    try {
+      const dnaArray = parseInput(inputString);
+      renderSingleStrandDNA(dnaArray, "dna-container");
+    } catch (error) {
+      console.error("Error parsing DNA input:", error);
+    }
+  }, [inputString]);
+
+  useEffect(() => {
+    renderDNA();
+  }, [renderDNA]);
+
+  return (
+    <div className="min-h-screen bg-gray-100 p-8">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-3xl font-bold mb-6 text-center">
+          Single Strand DNA Renderer
+        </h1>
+
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">DNA Sequence Input</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Enter a 2D array where: 0=nothing, 1=adenine(red), 2=thymine(blue),
+            3=cytosine(green), 4=guanine(yellow). Double-digit nucleotides
+            (11-14) will pair with single-digit ones (1-4) using complementary
+            base pairing (A-T, C-G). Paired nucleotides will be connected with
+            gray bonds and won&apos;t spin.
+          </p>
+
+          <textarea
+            value={inputString}
+            onChange={(e) => setInputString(e.target.value)}
+            className="w-full h-32 p-3 border border-gray-300 rounded-md font-mono text-sm"
+            placeholder="Single strand example:
+1,0,0,0
+2,0,0,0
+3,0,0,0
+
+Base paired example:
+1,2,3,4
+11,12,13,14"
+            spellCheck={false}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            onKeyDown={(e) => {
+              // Ensure copy/paste shortcuts work
+              if (
+                (e.ctrlKey || e.metaKey) &&
+                (e.key === "c" ||
+                  e.key === "v" ||
+                  e.key === "x" ||
+                  e.key === "a")
+              ) {
+                e.stopPropagation();
+              }
+            }}
+            onSelect={(e) => e.stopPropagation()}
+            onFocus={(e) => e.stopPropagation()}
+          />
+
+          <button
+            onClick={renderDNA}
+            className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
           >
-            🎮 View 3D Scene
-          </Link>
-          <Link
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-green-600 text-white gap-2 hover:bg-green-700 font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="/grid-demo"
-          >
-            🎯 Grid to 3D Demo
-          </Link>
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            Render DNA
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h2 className="text-xl font-semibold mb-4">3D DNA Visualization</h2>
+          <div className="mb-4 text-sm text-gray-600">
+            <strong>Camera Controls:</strong> Left click + drag to rotate view •
+            Right click + drag to pan • Scroll to zoom
+            <br />
+            <strong>Nucleotide Controls:</strong> Click and drag on any
+            nucleotide (sugar sphere or base) to rotate it individually
+            <br />
+            <strong>Animation:</strong> Nucleotides gently rotate automatically
+            to simulate a light breeze
+          </div>
+          <div className="legend mb-4 flex flex-wrap gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-red-500 rounded"></div>
+              <span>Adenine</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-blue-500 rounded"></div>
+              <span>Thymine</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-green-500 rounded"></div>
+              <span>Cytosine</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-yellow-500 rounded"></div>
+              <span>Guanine</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-white border border-gray-400 rounded"></div>
+              <span>Sugar Backbone</span>
+            </div>
+          </div>
+
+          <div
+            id="dna-container"
+            className="w-full h-96 bg-gray-50 rounded-md border border-gray-200"
+          ></div>
+        </div>
+      </div>
     </div>
   );
 }

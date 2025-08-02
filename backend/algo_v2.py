@@ -6,16 +6,19 @@ a continuous, zigzag pattern that fills the shape. The algorithm:
 
 1. Starts at the topmost point of the shape
 2. Splits into two 'snakes' (paths): one moving left, one moving right
-3. Each snake moves toward the nearest edge of the shape
-4. Upon reaching an edge: turns 90° right, moves down 20 pixels, turns 90° right again
+3. Each snake moves toward the shape boundaries (stays within shape boundaries)
+4. Upon reaching shape edge: turns 90° right, moves down 20 pixels, turns 90° right again
 5. Continues until hitting edge or other snake, then: turns 90° left, down 20 pixels, 90° left
-6. This creates an alternating right-turn/left-turn pattern that fills the shape
+6. Process ends when snakes encounter a horizontal line with no shape pixels (all black)
 
-The result is a continuous, structured zigzag pattern rather than loose horizontal lines.
+Key features:
+- Lines stay within shape boundaries for clean, contained patterns
+- Ensures majority of shape is filled with structured zigzag pattern
+- Automatically terminates when no more shape area remains to fill
 
 Usage:
 - For custom image: mask = load_shape_image("your_image.png")
-- The script includes a triangle example for testing
+- The script includes multiple test shapes (triangle, hexagon, square, circle)
 """
 
 import cv2
@@ -123,21 +126,32 @@ class Snake:
             
         return False
         
+    def check_line_has_shape(self, mask, y):
+        """Check if a horizontal line at y-coordinate has any shape pixels"""
+        if y >= mask.shape[0] or y < 0:
+            return False
+        return np.any(mask[y] == 255)
+    
     def move_step(self, mask, occupied_points, other_snake=None):
         """Move the snake one step according to its current state"""
-        # Check if we've reached the bottom of the shape
+        # Check if we've reached the bottom of the shape or no more shape to fill
         if self.current_y >= mask.shape[0] - 5:
+            return False
+            
+        # Check if current line has any shape pixels - if not, end the process
+        if not self.check_line_has_shape(mask, self.current_y):
             return False
             
         moved = False
         
         if self.state == "to_edge":
-            # Move in current direction until hitting edge or other snake
+            # Move in current direction - stay within shape boundaries
             new_x = self.current_x + self.dx * step_size
             new_y = self.current_y + self.dy * step_size
             
-            # Check if next position is valid
-            if is_point_in_shape(mask, new_x, new_y):
+            # Check if next position is within shape and image bounds
+            if (0 <= new_x < mask.shape[1] and 0 <= new_y < mask.shape[0] and 
+                is_point_in_shape(mask, new_x, new_y)):
                 # Check for collision with other snake
                 collision = other_snake and (new_x, new_y) in other_snake.get_recent_points(8)
                 
@@ -159,7 +173,7 @@ class Snake:
                     self.state = f"turn_{self.turn_type}_down"
                     self.down_counter = 0
             else:
-                # Hit edge, start turning sequence
+                # Hit shape boundary, start turning sequence
                 if self.turn_type == "right":
                     self.turn_90_right()
                     self.state = "turn_right_down"
@@ -173,13 +187,18 @@ class Snake:
             if self.down_counter < down_pixels:
                 new_y = self.current_y + 1
                 if new_y < mask.shape[0] and is_point_in_shape(mask, self.current_x, new_y):
-                    self.current_y = new_y
-                    self.path.append((self.current_x, self.current_y))
-                    occupied_points.add((self.current_x, self.current_y))
-                    self.down_counter += 1
-                    moved = True
+                    # Check if the new line has any shape to fill
+                    if self.check_line_has_shape(mask, new_y):
+                        self.current_y = new_y
+                        self.path.append((self.current_x, self.current_y))
+                        occupied_points.add((self.current_x, self.current_y))
+                        self.down_counter += 1
+                        moved = True
+                    else:
+                        # No more shape to fill, end process
+                        return False
                 else:
-                    self.down_counter = down_pixels  # Skip if can't move down
+                    self.down_counter = down_pixels  # Skip if can't move down or outside shape
                     
             if self.down_counter >= down_pixels:
                 # After moving down specified pixels, turn right again and continue
@@ -192,13 +211,18 @@ class Snake:
             if self.down_counter < down_pixels:
                 new_y = self.current_y + 1
                 if new_y < mask.shape[0] and is_point_in_shape(mask, self.current_x, new_y):
-                    self.current_y = new_y
-                    self.path.append((self.current_x, self.current_y))
-                    occupied_points.add((self.current_x, self.current_y))
-                    self.down_counter += 1
-                    moved = True
+                    # Check if the new line has any shape to fill
+                    if self.check_line_has_shape(mask, new_y):
+                        self.current_y = new_y
+                        self.path.append((self.current_x, self.current_y))
+                        occupied_points.add((self.current_x, self.current_y))
+                        self.down_counter += 1
+                        moved = True
+                    else:
+                        # No more shape to fill, end process
+                        return False
                 else:
-                    self.down_counter = down_pixels  # Skip if can't move down
+                    self.down_counter = down_pixels  # Skip if can't move down or outside shape
                     
             if self.down_counter >= down_pixels:
                 # After moving down specified pixels, turn left again and continue
@@ -294,21 +318,66 @@ def visualize_snake_pattern(mask, snake_paths, output_path="output.png"):
     
     return result_img
 
+def create_test_shapes():
+    """Create various test shapes"""
+    height, width = 400, 400
+    shapes = {}
+    
+    # Triangle
+    triangle_mask = np.zeros((height, width), dtype=np.uint8)
+    triangle_points = np.array([[width//2, 50], [50, height-50], [width-50, height-50]], np.int32)
+    cv2.fillPoly(triangle_mask, [triangle_points], 255)
+    shapes['triangle'] = triangle_mask
+    
+    # Hexagon
+    hex_mask = np.zeros((height, width), dtype=np.uint8)
+    hex_points = []
+    center_x, center_y = width//2, height//2
+    radius = 120
+    for i in range(6):
+        angle = i * np.pi / 3  # 60 degrees per vertex
+        x = int(center_x + radius * np.cos(angle))
+        y = int(center_y + radius * np.sin(angle))
+        hex_points.append([x, y])
+    hex_points = np.array(hex_points, np.int32)
+    cv2.fillPoly(hex_mask, [hex_points], 255)
+    shapes['hexagon'] = hex_mask
+    
+    # Square
+    square_mask = np.zeros((height, width), dtype=np.uint8)
+    cv2.rectangle(square_mask, (80, 80), (320, 320), 255, -1)
+    shapes['square'] = square_mask
+    
+    # Circle
+    circle_mask = np.zeros((height, width), dtype=np.uint8)
+    cv2.circle(circle_mask, (width//2, height//2), 120, 255, -1)
+    shapes['circle'] = circle_mask
+    
+    return shapes
+
 # === Main Execution ===
 if __name__ == "__main__":
-    # Option 1: Load from external image file
+    # Try to load external image first, then create test shapes
     try:
-        mask = load_shape_image("Circle_input.png")
-        print("Loaded Circle_input.png")
+        mask = load_shape_image("circle_test.png")
+        print("Loaded triangle_test.png")
+        shape_name = "loaded_triangle"
     except:
-        # Option 2: Create a triangle for testing if file doesn't exist
-        print("Creating test triangle shape")
-        height, width = 400, 400
-        mask = np.zeros((height, width), dtype=np.uint8)
+        # Create test shapes
+        print("Creating test shapes...")
+        shapes = create_test_shapes()
         
-        # Triangle points
-        triangle_points = np.array([[width//2, 50], [50, height-50], [width-50, height-50]], np.int32)
-        cv2.fillPoly(mask, [triangle_points], 255)
+        # Use hexagon as default
+        shape_name = "hexagon"  
+        mask = shapes[shape_name]
+        print(f"Created test {shape_name}")
+        
+        # Save test shapes for future use
+        cv2.imwrite("triangle_test.png", shapes['triangle'])
+        cv2.imwrite("hexagon_test.png", shapes['hexagon'])
+        cv2.imwrite("square_test.png", shapes['square'])
+        cv2.imwrite("circle_test.png", shapes['circle'])
+        print("Saved all test shapes for future use")
     
     # Generate snake pattern
     print("Generating snake pattern...")
@@ -316,8 +385,10 @@ if __name__ == "__main__":
     
     # Visualize result
     print("Creating visualization...")
-    result = visualize_snake_pattern(mask, snake_paths)
+    output_filename = f"output_{shape_name}.png"
+    result = visualize_snake_pattern(mask, snake_paths, output_filename)
     
     print(f"Generated {len(snake_paths)} snake paths")
     for i, path in enumerate(snake_paths):
-        print(f"Snake {i+1}: {len(path)} points") 
+        print(f"Snake {i+1}: {len(path)} points")
+    print(f"Output saved as: {output_filename}") 

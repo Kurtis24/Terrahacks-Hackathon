@@ -28,15 +28,16 @@ from scipy.spatial.distance import cdist
 from collections import deque
 import json
 from datetime import datetime
+import random
 
 # === Parameters ===
 step_size = 5                 # Step size for snake movement (smaller for more precise turns)
 down_pixels = 8                # Pixels to move down during turns
 crossover_spacing = 10          # Distance between crossovers
 
-def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, output_path="line_coordinates.json", target_size=300):
+def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, output_path="line_coordinates.json", target_size=300, pink_branches=None):
     """
-    Save line coordinates for green and red lines on a 300x300 pixel grid
+    Save line coordinates for green, red, and pink lines on a 300x300 pixel grid
     
     Args:
         snake_paths: List of snake paths [left_snake, right_snake]
@@ -44,10 +45,12 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
         shape_name: Name of the shape processed
         output_path: Path to save the JSON file
         target_size: Size of the target grid (default 300x300)
+        pink_branches: List of pink branch lines (optional)
     """
-    # Create separate arrays for green (left) and red (right) lines
+    # Create separate arrays for green (left), red (right), and pink (branch) lines
     green_array = np.zeros((target_size, target_size), dtype=np.uint8)
     red_array = np.zeros((target_size, target_size), dtype=np.uint8)
+    pink_array = np.zeros((target_size, target_size), dtype=np.uint8)
     
     # Get the original image dimensions from the first snake path to determine scaling
     if len(snake_paths) > 0 and len(snake_paths[0]) > 0:
@@ -95,19 +98,43 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
             
             draw_line_in_array(red_array, x0_scaled, y0_scaled, x1_scaled, y1_scaled, value=1)
     
+    # Draw pink branch lines
+    if pink_branches:
+        for branch in pink_branches:
+            for i in range(len(branch) - 1):
+                x0, y0 = branch[i]
+                x1, y1 = branch[i + 1]
+                
+                # Scale coordinates to 300x300 grid
+                x0_scaled = int(x0 * scale_x)
+                y0_scaled = int(y0 * scale_y)
+                x1_scaled = int(x1 * scale_x)
+                y1_scaled = int(y1 * scale_y)
+                
+                draw_line_in_array(pink_array, x0_scaled, y0_scaled, x1_scaled, y1_scaled, value=1)
+    
     # Extract coordinates where lines exist
-    green_coordinates = []
-    red_coordinates = []
+    combined_snake_coordinates = []
+    pink_coordinates = []
     
-    # Find all green line coordinates
+    # Find all green line coordinates and add to combined array
     green_y_coords, green_x_coords = np.where(green_array == 1)
+    green_count = 0
     for i in range(len(green_x_coords)):
-        green_coordinates.append([int(green_x_coords[i]), int(green_y_coords[i])])
+        combined_snake_coordinates.append([int(green_x_coords[i]), int(green_y_coords[i])])
+        green_count += 1
     
-    # Find all red line coordinates
+    # Find all red line coordinates and add to combined array
     red_y_coords, red_x_coords = np.where(red_array == 1)
+    red_count = 0
     for i in range(len(red_x_coords)):
-        red_coordinates.append([int(red_x_coords[i]), int(red_y_coords[i])])
+        combined_snake_coordinates.append([int(red_x_coords[i]), int(red_y_coords[i])])
+        red_count += 1
+    
+    # Find all pink line coordinates (separate from main snake lines)
+    pink_y_coords, pink_x_coords = np.where(pink_array == 1)
+    for i in range(len(pink_x_coords)):
+        pink_coordinates.append([int(pink_x_coords[i]), int(pink_y_coords[i])])
     
     # Prepare the simplified JSON data structure
     json_data = {
@@ -115,27 +142,30 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
             "timestamp": datetime.now().isoformat(),
             "shape_name": shape_name,
             "grid_size": [target_size, target_size],
-            "algorithm_version": "algo_v2"
+            "algorithm_version": "algo_v2_enhanced"
         },
         "line_coordinates": {
-            "green_lines": {
-                "color": "green",
-                "snake_type": "left_snake",
-                "total_pixels": len(green_coordinates),
-                "coordinates": green_coordinates
+            "snake_lines": {
+                "description": "Combined green and red snake lines",
+                "colors": ["green", "red"],
+                "snake_types": ["left_snake", "right_snake"],
+                "total_pixels": len(combined_snake_coordinates),
+                "coordinates": combined_snake_coordinates
             },
-            "red_lines": {
-                "color": "red", 
-                "snake_type": "right_snake",
-                "total_pixels": len(red_coordinates),
-                "coordinates": red_coordinates
+            "pink_lines": {
+                "color": "pink",
+                "snake_type": "collision_branches",
+                "total_pixels": len(pink_coordinates),
+                "coordinates": pink_coordinates
             }
         },
         "summary": {
             "grid_dimensions": f"{target_size}x{target_size}",
-            "total_green_pixels": len(green_coordinates),
-            "total_red_pixels": len(red_coordinates),
-            "total_line_pixels": len(green_coordinates) + len(red_coordinates)
+            "total_green_pixels": green_count,
+            "total_red_pixels": red_count,
+            "total_snake_pixels": len(combined_snake_coordinates),
+            "total_pink_pixels": len(pink_coordinates),
+            "total_line_pixels": len(combined_snake_coordinates) + len(pink_coordinates)
         }
     }
     
@@ -144,9 +174,9 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
         json.dump(json_data, f, indent=2, separators=(',', ': '))
     
     print(f"Line coordinates saved to JSON: {output_path}")
-    print(f"Green line pixels: {len(green_coordinates)}")
-    print(f"Red line pixels: {len(red_coordinates)}")
-    print(f"Total line pixels on {target_size}x{target_size} grid: {len(green_coordinates) + len(red_coordinates)}")
+    print(f"Combined snake line pixels: {len(combined_snake_coordinates)} (Green: {green_count}, Red: {red_count})")
+    print(f"Pink branch pixels: {len(pink_coordinates)}")
+    print(f"Total line pixels on {target_size}x{target_size} grid: {len(combined_snake_coordinates) + len(pink_coordinates)}")
     
     return json_data
 
@@ -197,8 +227,8 @@ def draw_line_in_array(array, x0, y0, x1, y1, value=1):
             array[y, x] = value
         
         if x == x1 and y == y1:
-            break
-            
+                        break
+                
         e2 = 2 * err
         if e2 > -dy:
             err -= dy
@@ -299,8 +329,181 @@ def get_shape_center_x(mask, y):
         return None
     return int(np.mean(x_inside))
 
+def calculate_bump_height(collision_x, collision_y, occupied_points):
+    """
+    Calculate the height of the bump between two snake lines at collision point
+    
+    Args:
+        collision_x, collision_y: Collision point coordinates
+        occupied_points: Set of occupied points from both snakes
+        
+    Returns:
+        Height of the bump (Y-coordinate difference)
+    """
+    if not occupied_points:
+        return 5  # Default small bump height
+    
+    # Look for occupied points in a small radius around collision point
+    search_radius = 10
+    nearby_y_coords = []
+    
+    for x in range(collision_x - search_radius, collision_x + search_radius + 1):
+        for y in range(collision_y - search_radius, collision_y + search_radius + 1):
+            if (x, y) in occupied_points and abs(x - collision_x) <= search_radius:
+                nearby_y_coords.append(y)
+    
+    if len(nearby_y_coords) < 2:
+        return 5  # Default if not enough points found
+    
+    # Calculate the range (difference between max and min Y coordinates)
+    y_min = min(nearby_y_coords)
+    y_max = max(nearby_y_coords)
+    bump_height = y_max - y_min
+    
+    # Limit bump height to a reasonable range (1-20 pixels)
+    bump_height = max(1, min(20, bump_height))
+    
+    return bump_height
+
+def find_snake_midpoint(collision_x, collision_y, occupied_points):
+    """
+    Find the midpoint between the current snake position and the nearest other snake position
+    
+    Args:
+        collision_x, collision_y: Current snake collision coordinates
+        occupied_points: Set of all occupied points from both snakes
+        
+    Returns:
+        Tuple of (midpoint_x, midpoint_y) coordinates
+    """
+    if not occupied_points:
+        return collision_x, collision_y
+    
+    # Find the nearest occupied point (from the other snake) within a small radius
+    search_radius = 3
+    nearest_distance = float('inf')
+    nearest_point = None
+    
+    for x in range(collision_x - search_radius, collision_x + search_radius + 1):
+        for y in range(collision_y - search_radius, collision_y + search_radius + 1):
+            if (x, y) in occupied_points and (x, y) != (collision_x, collision_y):
+                distance = abs(x - collision_x) + abs(y - collision_y)  # Manhattan distance
+                if distance < nearest_distance:
+                    nearest_distance = distance
+                    nearest_point = (x, y)
+    
+    if nearest_point:
+        # Calculate midpoint between collision point and nearest other snake point
+        other_x, other_y = nearest_point
+        midpoint_x = (collision_x + other_x) // 2
+        midpoint_y = (collision_y + other_y) // 2
+        return midpoint_x, midpoint_y
+    else:
+        # If no nearby point found, use the collision point
+        return collision_x, collision_y
+
+def create_pink_branch(collision_x, collision_y, mask, occupied_points=None):
+    """
+    Create a pink branch line when snakes collide
+    
+    Args:
+        collision_x, collision_y: Collision point coordinates
+        mask: Shape mask to ensure branch stays within bounds
+        occupied_points: Set of occupied points to calculate bump height
+        
+    Returns:
+        List of coordinates forming the pink branch
+    """
+    branch_path = []
+    
+    # Calculate bump height by finding the local height difference
+    bump_height = calculate_bump_height(collision_x, collision_y, occupied_points)
+    
+    # Find the midpoint between the current snake and the other snake
+    midpoint_x, midpoint_y = find_snake_midpoint(collision_x, collision_y, occupied_points)
+    
+    # Randomly choose orientation: 1 for horizontal, 2 for vertical
+    orientation = random.randint(1, 2)
+    
+    # Use bump height for extensions instead of random values
+    extension1 = max(1, bump_height)  # Ensure at least 1 pixel
+    extension2 = max(1, bump_height)  # Use same height for both directions
+    
+    # Start from midpoint instead of collision point
+    branch_path.append((midpoint_x, midpoint_y))
+    
+    if orientation == 1:  # Horizontal line
+        # Randomly choose left or right for first extension
+        direction = random.randint(1, 2)  # 1 = left, 2 = right
+        direction_multiplier = -1 if direction == 1 else 1
+        
+        # Create horizontal line in first direction
+        for i in range(1, extension1 + 1):
+            new_x = midpoint_x + (direction_multiplier * i)
+            new_y = midpoint_y  # Keep same Y (horizontal line)
+            
+            # Check if position is valid and within shape bounds
+            if (0 <= new_x < mask.shape[1] and 0 <= new_y < mask.shape[0] and 
+                is_point_in_shape(mask, new_x, new_y)):
+                branch_path.append((new_x, new_y))
+            else:
+                break
+        
+        # Create horizontal line in opposite direction
+        for i in range(1, extension2 + 1):
+            new_x = midpoint_x + (-direction_multiplier * i)
+            new_y = midpoint_y  # Keep same Y (horizontal line)
+            
+            # Check if position is valid and within shape bounds
+            if (0 <= new_x < mask.shape[1] and 0 <= new_y < mask.shape[0] and 
+                is_point_in_shape(mask, new_x, new_y)):
+                branch_path.append((new_x, new_y))
+            else:
+                break
+        
+        orientation_name = "horizontal"
+        direction_name = f"{'left' if direction == 1 else 'right'} first"
+        
+    else:  # Vertical line
+        # Randomly choose up or down for first extension
+        direction = random.randint(1, 2)  # 1 = up, 2 = down
+        direction_multiplier = -1 if direction == 1 else 1
+        
+        # Create vertical line in first direction
+        for i in range(1, extension1 + 1):
+            new_x = midpoint_x  # Keep same X (vertical line)
+            new_y = midpoint_y + (direction_multiplier * i)
+            
+            # Check if position is valid and within shape bounds
+            if (0 <= new_x < mask.shape[1] and 0 <= new_y < mask.shape[0] and 
+                is_point_in_shape(mask, new_x, new_y)):
+                branch_path.append((new_x, new_y))
+            else:
+                break
+        
+        # Create vertical line in opposite direction
+        for i in range(1, extension2 + 1):
+            new_x = midpoint_x  # Keep same X (vertical line)
+            new_y = midpoint_y + (-direction_multiplier * i)
+            
+            # Check if position is valid and within shape bounds
+            if (0 <= new_x < mask.shape[1] and 0 <= new_y < mask.shape[0] and 
+                is_point_in_shape(mask, new_x, new_y)):
+                branch_path.append((new_x, new_y))
+            else:
+                break
+        
+        orientation_name = "vertical"
+        direction_name = f"{'up' if direction == 1 else 'down'} first"
+    
+    print(f"   🌸 Created MIDPOINT pink branch at ({midpoint_x}, {midpoint_y}) - "
+          f"Orientation: {orientation_name}, Direction: {direction_name}, "
+          f"Bump Height: {bump_height}px, Points: {len(branch_path)}")
+    
+    return branch_path
+
 class Snake:
-    def __init__(self, start_x, start_y, initial_direction, snake_id, scaffold_array=None):
+    def __init__(self, start_x, start_y, initial_direction, snake_id, scaffold_array=None, mask=None):
         self.path = [(start_x, start_y)]
         self.current_x = start_x
         self.current_y = start_y
@@ -313,6 +516,8 @@ class Snake:
         self.scaffold_array = scaffold_array  # Reference to the 2D scaffold array
         self.prev_x = start_x  # Track previous position for line drawing
         self.prev_y = start_y
+        self.mask = mask  # Reference to the shape mask for branch creation
+        self.pink_branches = []  # Store pink branch lines created by this snake
         
         # Mark starting position in scaffold array
         if self.scaffold_array is not None:
@@ -393,7 +598,13 @@ class Snake:
                     self.update_scaffold_array(self.current_x, self.current_y)
                     moved = True
                 else:
-                    # Collision detected, start turning sequence
+                    # Collision detected! Create a pink branch at collision point
+                    if self.mask is not None:
+                        branch = create_pink_branch(self.current_x, self.current_y, self.mask, occupied_points)
+                        if branch:
+                            self.pink_branches.append(branch)
+                    
+                    # Start turning sequence after collision
                     if self.turn_type == "right":
                         self.turn_90_left()  # If we were turning right, now turn left
                         self.turn_type = "left"
@@ -477,18 +688,18 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True):
     start_point = find_topmost_point(mask)
     if start_point is None:
         if return_array:
-            return [], np.zeros(array_shape, dtype=np.uint8)
+            return [], np.zeros(array_shape, dtype=np.uint8), []
         else:
-            return []
+            return [], []
     
     start_x, start_y = start_point
     
     # Initialize the scaffold array only if requested
     scaffold_array = np.zeros(array_shape, dtype=np.uint8) if return_array else None
     
-    # Create two snakes with initial horizontal directions, passing the scaffold array
-    left_snake = Snake(start_x, start_y, -1, "left", scaffold_array if return_array else None)
-    right_snake = Snake(start_x, start_y, 1, "right", scaffold_array if return_array else None)
+    # Create two snakes with initial horizontal directions, passing the scaffold array and mask
+    left_snake = Snake(start_x, start_y, -1, "left", scaffold_array if return_array else None, mask)
+    right_snake = Snake(start_x, start_y, 1, "right", scaffold_array if return_array else None, mask)
     
     occupied_points = set()
     occupied_points.add((start_x, start_y))
@@ -508,6 +719,10 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True):
     
     snake_paths = [left_snake.path, right_snake.path]
     
+    # Collect all pink branches from both snakes
+    all_pink_branches = left_snake.pink_branches + right_snake.pink_branches
+    print(f"🌸 Total pink branches created: {len(all_pink_branches)}")
+    
     if return_array:
         # Add crossovers to the scaffold array
         for path in snake_paths:
@@ -520,9 +735,9 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True):
                         if (0 <= new_x < array_shape[1] and 0 <= new_y < array_shape[0]):
                             scaffold_array[new_y, new_x] = 1
         
-        return snake_paths, scaffold_array
+        return snake_paths, scaffold_array, all_pink_branches
     else:
-        return snake_paths
+        return snake_paths, all_pink_branches
 
 # For backwards compatibility, create a function that only returns paths
 def generate_snake_pattern_legacy(mask):
@@ -578,12 +793,13 @@ def visualize_scaffold_array(scaffold_array, title="Scaffold Pattern Array", sav
     
     return plt.gcf()
 
-def visualize_snake_pattern(mask, snake_paths, output_path="output.png"):
+def visualize_snake_pattern(mask, snake_paths, output_path="output.png", pink_branches=None):
     """Visualize the snake pattern on the shape"""
     # Create colored output image
     result_img = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
     
     colors = [(0, 255, 0), (255, 0, 0)]  # Green for left snake, Red for right snake
+    pink_color = (255, 0, 255)  # Pink for branches
     
     # Draw snake paths
     for i, path in enumerate(snake_paths):
@@ -617,6 +833,28 @@ def visualize_snake_pattern(mask, snake_paths, output_path="output.png"):
                     cv2.circle(result_img, crossover, 3, (255, 0, 255), -1)  # Magenta crossovers
         except Exception as e:
             print(f"Warning: Error adding crossovers for path {i}: {e}")
+    
+    # Draw pink branch lines
+    if pink_branches:
+        for branch in pink_branches:
+            # Draw branch path
+            for j in range(len(branch) - 1):
+                pt1 = branch[j]
+                pt2 = branch[j + 1]
+                
+                # Ensure points are tuples of 2 integers
+                if (isinstance(pt1, (tuple, list)) and len(pt1) == 2 and
+                    isinstance(pt2, (tuple, list)) and len(pt2) == 2):
+                    try:
+                        pt1 = (int(pt1[0]), int(pt1[1]))
+                        pt2 = (int(pt2[0]), int(pt2[1]))
+                        cv2.line(result_img, pt1, pt2, pink_color, 2)  # Same thickness as green/red lines
+                    except Exception as e:
+                        print(f"Warning: Error drawing pink branch line from {pt1} to {pt2}: {e}")
+                        continue
+                else:
+                    print(f"Warning: Invalid pink branch point format, skipping line {j}")
+                    break
     
     # Save and display
     cv2.imwrite(output_path, result_img)

@@ -15,7 +15,7 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     # Generate snake pattern with array output
     print("🔄 Generating snake pattern...")
     start_time = time.time()
-    snake_paths, scaffold_array = generate_snake_pattern(mask, array_shape=(300, 300), return_array=True)
+    snake_paths, scaffold_array, pink_branches = generate_snake_pattern(mask, array_shape=(300, 300), return_array=True)
     generation_time = time.time() - start_time
     
     # Create unique filenames with timestamp
@@ -47,16 +47,16 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     
     # Create visualization first
     print(f"\n🎨 Creating visualization...")
-    result = visualize_snake_pattern(mask, snake_paths, output_filename)
+    result = visualize_snake_pattern(mask, snake_paths, output_filename, pink_branches)
     
     # Save line coordinates to JSON for 300x300 grid after visualization
     print("💾 Saving line coordinates to JSON...")
-    json_data = save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, json_filename, target_size=300)
+    json_data = save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, json_filename, target_size=300, pink_branches=pink_branches)
     
     # Line coordinates information
     print(f"   📋 Grid Size: 300x300 pixels")
-    print(f"   🟢 Green Line Pixels: {json_data['summary']['total_green_pixels']:,}")
-    print(f"   🔴 Red Line Pixels: {json_data['summary']['total_red_pixels']:,}")
+    print(f"   🐍 Combined Snake Pixels: {json_data['summary']['total_snake_pixels']:,} (🟢 Green: {json_data['summary']['total_green_pixels']:,}, 🔴 Red: {json_data['summary']['total_red_pixels']:,})")
+    print(f"   🌸 Pink Branch Pixels: {json_data['summary']['total_pink_pixels']:,}")
     print(f"   📊 Total Line Pixels: {json_data['summary']['total_line_pixels']:,}")
     
     # Create scaffold array visualization

@@ -6,16 +6,21 @@ from algo_v2 import *
 
 def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     """
-    Run the snake pattern algorithm on the loaded image and save to JSON
+    Run the snake pattern algorithm on the loaded image and save to JSON with gap-filling
     """
     print("\n" + "="*60)
-    print("🐍 RUNNING SNAKE PATTERN ALGORITHM")
+    print("🐍 RUNNING ENHANCED SNAKE PATTERN ALGORITHM")
     print("="*60)
     
-    # Generate snake pattern with array output
-    print("🔄 Generating snake pattern...")
+    # Generate snake pattern with array output and gap filling
+    print("🔄 Generating snake pattern with recursive gap filling...")
     start_time = time.time()
-    snake_paths, scaffold_array = generate_snake_pattern(mask, array_shape=(300, 300), return_array=True)
+    snake_paths, scaffold_array = generate_snake_pattern(
+        mask, 
+        array_shape=(300, 300), 
+        return_array=True, 
+        enable_gap_filling=True
+    )
     generation_time = time.time() - start_time
     
     # Create unique filenames with timestamp
@@ -23,29 +28,42 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     json_filename = f"snake_paths_{shape_name}_{timestamp}.json"
     output_filename = f"snake_pattern_{shape_name}_{timestamp}.png"
     
-    # Save to JSON file
-    print("💾 Saving coordinates to JSON...")
-    json_data = save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, json_filename)
+    # Save to JSON file with gap-filling information
+    print("💾 Saving coordinates to JSON with gap-filling data...")
+    json_data = save_snake_paths_to_json(
+        snake_paths, 
+        scaffold_array, 
+        shape_name, 
+        json_filename, 
+        gap_filling_enabled=True
+    )
+    
+    # Extract statistics from JSON data
+    initial_count = json_data['summary']['initial_snake_count']
+    gap_count = json_data['summary']['gap_filling_snake_count']
+    initial_points = json_data['summary']['initial_coordinates']
+    gap_points = json_data['summary']['gap_filling_coordinates']
+    total_points = json_data['summary']['total_coordinates']
     
     # Print detailed analysis
     print(f"\n📊 ALGORITHM RESULTS:")
     print(f"   ⏱️  Generation Time: {generation_time:.2f} seconds")
-    print(f"   🐍 Number of Snake Paths: {len(snake_paths)}")
+    print(f"   🐍 Total Snake Paths: {len(snake_paths)}")
+    print(f"   📈 Initial Paths: {initial_count} ({initial_points:,} points)")
+    if gap_count > 0:
+        print(f"   🔍 Gap-Filling Paths: {gap_count} ({gap_points:,} points)")
+        improvement = (gap_points / initial_points * 100) if initial_points > 0 else 0
+        print(f"   📈 Coverage Improvement: +{improvement:.1f}% more points")
     
-    total_points = 0
-    for i, path in enumerate(snake_paths):
-        points = len(path)
-        total_points += points
-        snake_name = "Left Snake" if i == 0 else "Right Snake"
-        print(f"   🔸 {snake_name}: {points:,} points")
-    
-    print(f"   📈 Total Points Generated: {total_points:,}")
-    print(f"   📏 Average Points per Snake: {total_points/len(snake_paths):,.0f}")
+    print(f"   📊 Total Points Generated: {total_points:,}")
+    print(f"   📏 Average Points per Path: {total_points/len(snake_paths):,.0f}")
     
     # Scaffold array information
+    scaffold_pixels = np.sum(scaffold_array)
+    scaffold_density = scaffold_pixels / (scaffold_array.shape[0] * scaffold_array.shape[1]) * 100
     print(f"   📋 Scaffold Array Shape: {scaffold_array.shape}")
-    print(f"   🎯 Scaffold Pixels: {np.sum(scaffold_array):,}")
-    print(f"   📊 Scaffold Density: {np.sum(scaffold_array) / (scaffold_array.shape[0] * scaffold_array.shape[1]) * 100:.2f}%")
+    print(f"   🎯 Scaffold Pixels: {scaffold_pixels:,}")
+    print(f"   📊 Scaffold Density: {scaffold_density:.2f}%")
     
     # Calculate coverage metrics
     shape_pixels = np.sum(mask == 255)
@@ -55,21 +73,34 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     print(f"   ⚪ Shape Area: {shape_pixels:,} white pixels")
     
     # Create visualization
-    print(f"\n🎨 Creating visualization...")
+    print(f"\n🎨 Creating visualizations...")
     result = visualize_snake_pattern(mask, snake_paths, output_filename)
+    
+    # Create enhanced visualization (different colors for initial vs gap-filling)
+    enhanced_filename = f"enhanced_pattern_{shape_name}_{timestamp}.png"
+    enhanced_result = visualize_snake_pattern_enhanced(mask, snake_paths, enhanced_filename)
     
     # Create scaffold array visualization
     scaffold_filename = f"scaffold_array_{shape_name}_{timestamp}.png"
     scaffold_fig = visualize_scaffold_array(
         scaffold_array, 
-        title=f"Scaffold Array - {shape_name.title()}", 
+        title=f"Enhanced Scaffold Array - {shape_name.title()}", 
         save_path=scaffold_filename
     )
     
     print(f"✅ Pattern visualization saved as: {output_filename}")
+    print(f"✅ Enhanced visualization saved as: {enhanced_filename}")
     print(f"✅ Scaffold array saved as: {scaffold_filename}")
     print(f"✅ JSON coordinates saved as: {json_filename}")
-    print(f"📁 Total files created: 3")
+    print(f"📁 Total files created: 4")
+    
+    # Gap filling summary
+    if gap_count > 0:
+        print(f"\n🎯 GAP FILLING SUMMARY:")
+        print(f"   🔍 Gaps identified and filled: {gap_count}")
+        print(f"   📈 Additional coverage: {gap_points:,} points")
+        print(f"   📊 Improvement factor: {json_data['summary']['coverage_improvement']['improvement_factor']:.2f}x")
+        
     print("="*60)
     
     return snake_paths, scaffold_array, json_filename, output_filename

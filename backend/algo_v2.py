@@ -28,21 +28,239 @@ from scipy.spatial.distance import cdist
 from collections import deque
 import json
 from datetime import datetime
+from scipy.ndimage import label, find_objects
+from scipy import ndimage
 
 # === Parameters ===
 step_size = 5                 # Step size for snake movement (smaller for more precise turns)
 down_pixels = 8                # Pixels to move down during turns
 crossover_spacing = 10          # Distance between crossovers
+gap_fill_threshold = 400        # Minimum area (pixels) for gap-filling (20x20 = 400)
+min_gap_dimension = 15          # Minimum width/height for a gap to be considered
 
-def save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, output_path="snake_paths.json"):
+def find_scaffold_gaps(scaffold_array, shape_mask=None, min_area=400, min_dimension=15):
     """
-    Save snake paths and scaffold data to JSON format
+    Find contiguous regions of 0s (gaps) in the scaffold array that are large enough to fill.
     
     Args:
-        snake_paths: List of snake paths
+        scaffold_array: 2D numpy array where 1s represent scaffold paths
+        shape_mask: Original shape mask to ensure we only consider gaps within the shape
+        min_area: Minimum area in pixels for a gap to be considered
+        min_dimension: Minimum width or height for a gap to be considered
+        
+    Returns:
+        List of gap regions with their properties
+    """
+    # Create inverse mask (1 where there are gaps, 0 where there are scaffolds)
+    gap_mask = (scaffold_array == 0).astype(np.uint8)
+    
+    # If we have a shape mask, only consider gaps within the original shape
+    if shape_mask is not None:
+        # Resize shape_mask to match scaffold_array if needed
+        if shape_mask.shape != scaffold_array.shape:
+            shape_mask_resized = cv2.resize(shape_mask, 
+                                          (scaffold_array.shape[1], scaffold_array.shape[0]), 
+                                          interpolation=cv2.INTER_NEAREST)
+            # Convert to binary (255 -> 1)
+            shape_mask_resized = (shape_mask_resized > 127).astype(np.uint8)
+        else:
+            shape_mask_resized = (shape_mask > 127).astype(np.uint8)
+        
+        # Only consider gaps that are within the original shape
+        gap_mask = gap_mask & shape_mask_resized
+    
+    # Find connected components (contiguous gap regions)
+    labeled_gaps, num_gaps = label(gap_mask)
+    gap_regions = []
+    
+    if num_gaps == 0:
+        return gap_regions
+    
+    # Analyze each gap region
+    for gap_id in range(1, num_gaps + 1):
+        gap_pixels = np.where(labeled_gaps == gap_id)
+        
+        # Calculate region properties
+        y_coords = gap_pixels[0]
+        x_coords = gap_pixels[1]
+        
+        if len(y_coords) == 0:
+            continue
+            
+        # Bounding box
+        min_y, max_y = np.min(y_coords), np.max(y_coords)
+        min_x, max_x = np.min(x_coords), np.max(x_coords)
+        
+        # Dimensions
+        width = max_x - min_x + 1
+        height = max_y - min_y + 1
+        area = len(y_coords)
+        
+        # Check if gap meets our criteria
+        if (area >= min_area and 
+            width >= min_dimension and 
+            height >= min_dimension):
+            
+            # Find topmost point of this gap (for snake starting point)
+            topmost_y = min_y
+            topmost_x_coords = x_coords[y_coords == topmost_y]
+            topmost_x = int(np.mean(topmost_x_coords))
+            
+            gap_info = {
+                'id': gap_id,
+                'area': area,
+                'width': width,
+                'height': height,
+                'bbox': (min_x, min_y, max_x, max_y),
+                'topmost_point': (topmost_x, topmost_y),
+                'mask': (labeled_gaps == gap_id)
+            }
+            
+            gap_regions.append(gap_info)
+    
+    # Sort by area (largest first)
+    gap_regions.sort(key=lambda x: x['area'], reverse=True)
+    
+    return gap_regions
+
+def generate_snake_pattern_for_gap(gap_info, scaffold_array, shape_mask=None):
+    """
+    Generate snake pattern specifically for a gap region.
+    
+    Args:
+        gap_info: Dictionary containing gap information
+        scaffold_array: Current scaffold array to avoid overwriting
+        shape_mask: Original shape mask for boundary checking
+        
+    Returns:
+        List of new snake paths generated for this gap
+    """
+    # Create a temporary mask for this gap only
+    gap_mask = gap_info['mask'].astype(np.uint8) * 255
+    
+    # If we have a shape mask, intersect with it
+    if shape_mask is not None:
+        if shape_mask.shape != gap_mask.shape:
+            shape_mask_resized = cv2.resize(shape_mask, 
+                                          (gap_mask.shape[1], gap_mask.shape[0]), 
+                                          interpolation=cv2.INTER_NEAREST)
+        else:
+            shape_mask_resized = shape_mask
+        gap_mask = cv2.bitwise_and(gap_mask, shape_mask_resized)
+    
+    # Use the topmost point as starting point
+    start_x, start_y = gap_info['topmost_point']
+    
+    # Create modified snakes that respect existing scaffold
+    left_snake = GapFillingSnake(start_x, start_y, -1, "gap_left", scaffold_array)
+    right_snake = GapFillingSnake(start_x, start_y, 1, "gap_right", scaffold_array)
+    
+    occupied_points = set()
+    occupied_points.add((start_x, start_y))
+    
+    # Mark starting point in scaffold array
+    if (0 <= start_y < scaffold_array.shape[0] and 
+        0 <= start_x < scaffold_array.shape[1]):
+        scaffold_array[start_y, start_x] = 1
+    
+    # Run snakes with limited iterations for gap filling
+    max_iterations = 5000  # Smaller limit for gap filling
+    iteration = 0
+    
+    while iteration < max_iterations:
+        left_active = left_snake.move_step(gap_mask, occupied_points, right_snake)
+        right_active = right_snake.move_step(gap_mask, occupied_points, left_snake)
+        
+        if not left_active and not right_active:
+            break
+            
+        iteration += 1
+    
+    return [left_snake.path, right_snake.path]
+
+def recursive_gap_filling(scaffold_array, shape_mask=None, max_iterations=10):
+    """
+    Recursively fill gaps in the scaffold array until no significant gaps remain.
+    
+    Args:
+        scaffold_array: 2D numpy array to fill gaps in
+        shape_mask: Original shape mask for boundary checking
+        max_iterations: Maximum number of recursive iterations
+        
+    Returns:
+        List of all gap-filling snake paths generated
+    """
+    all_gap_paths = []
+    iteration = 0
+    
+    print(f"🔄 Starting recursive gap filling...")
+    
+    while iteration < max_iterations:
+        # Find current gaps
+        gaps = find_scaffold_gaps(
+            scaffold_array, 
+            shape_mask, 
+            min_area=gap_fill_threshold,
+            min_dimension=min_gap_dimension
+        )
+        
+        if not gaps:
+            print(f"✅ No more significant gaps found after {iteration} iterations")
+            break
+            
+        print(f"🔍 Iteration {iteration + 1}: Found {len(gaps)} gaps to fill")
+        
+        gaps_filled_this_iteration = 0
+        
+        # Process each gap
+        for i, gap in enumerate(gaps):
+            print(f"   📍 Filling gap {i+1}/{len(gaps)} - Area: {gap['area']} pixels ({gap['width']}x{gap['height']})")
+            
+            # Generate snake paths for this gap
+            gap_paths = generate_snake_pattern_for_gap(gap, scaffold_array, shape_mask)
+            
+            # Add to our collection
+            all_gap_paths.extend(gap_paths)
+            gaps_filled_this_iteration += 1
+            
+            # Add crossovers for gap paths
+            for path in gap_paths:
+                if len(path) > 1:  # Only add crossovers if path has points
+                    crossovers = add_crossovers_to_path(path)
+                    for crossover_x, crossover_y in crossovers:
+                        for dy in range(-1, 2):
+                            for dx in range(-1, 2):
+                                new_x, new_y = crossover_x + dx, crossover_y + dy
+                                if (0 <= new_x < scaffold_array.shape[1] and 
+                                    0 <= new_y < scaffold_array.shape[0]):
+                                    scaffold_array[new_y, new_x] = 1
+        
+        print(f"   ✅ Filled {gaps_filled_this_iteration} gaps in iteration {iteration + 1}")
+        iteration += 1
+    
+    if iteration >= max_iterations:
+        print(f"⚠️  Reached maximum iterations ({max_iterations}) for gap filling")
+    
+    total_gap_paths = len(all_gap_paths)
+    total_gap_points = sum(len(path) for path in all_gap_paths)
+    
+    print(f"🎯 Gap filling complete:")
+    print(f"   📊 Total gap-filling iterations: {iteration}")
+    print(f"   🐍 Total gap snake paths: {total_gap_paths}")
+    print(f"   📍 Total gap points generated: {total_gap_points}")
+    
+    return all_gap_paths
+
+def save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, output_path="snake_paths.json", gap_filling_enabled=True):
+    """
+    Save snake paths and scaffold data to JSON format with gap-filling information
+    
+    Args:
+        snake_paths: List of all snake paths (initial + gap-filling)
         scaffold_array: 2D numpy array of the scaffold
         shape_name: Name of the shape processed
         output_path: Path to save the JSON file
+        gap_filling_enabled: Whether gap filling was used
     """
     # Convert numpy array data types to Python native types for JSON serialization
     def convert_numpy_types(obj):
@@ -54,16 +272,24 @@ def save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, output_pat
             return obj.tolist()
         return obj
     
+    # Separate initial paths from gap-filling paths
+    # Assume first 2 paths are initial (left and right snakes)
+    initial_paths = snake_paths[:2] if len(snake_paths) >= 2 else snake_paths
+    gap_filling_paths = snake_paths[2:] if len(snake_paths) > 2 else []
+    
     # Prepare the data structure
     json_data = {
         "metadata": {
             "timestamp": datetime.now().isoformat(),
             "shape_name": shape_name,
-            "algorithm_version": "algo_v2",
+            "algorithm_version": "algo_v2_with_gap_filling",
+            "gap_filling_enabled": gap_filling_enabled,
             "parameters": {
                 "step_size": step_size,
                 "down_pixels": down_pixels,
-                "crossover_spacing": crossover_spacing
+                "crossover_spacing": crossover_spacing,
+                "gap_fill_threshold": gap_fill_threshold,
+                "min_gap_dimension": min_gap_dimension
             },
             "scaffold_info": {
                 "array_shape": list(scaffold_array.shape),
@@ -71,25 +297,40 @@ def save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, output_pat
                 "density_percent": float(np.sum(scaffold_array) / (scaffold_array.shape[0] * scaffold_array.shape[1]) * 100)
             }
         },
-        "snake_paths": {
+        "initial_snake_paths": {
             "left_snake": {
-                "path_length": len(snake_paths[0]),
-                "coordinates": [[convert_numpy_types(x), convert_numpy_types(y)] for x, y in snake_paths[0]]
+                "path_length": len(initial_paths[0]) if len(initial_paths) > 0 else 0,
+                "coordinates": [[convert_numpy_types(x), convert_numpy_types(y)] for x, y in initial_paths[0]] if len(initial_paths) > 0 else []
             },
             "right_snake": {
-                "path_length": len(snake_paths[1]),
-                "coordinates": [[convert_numpy_types(x), convert_numpy_types(y)] for x, y in snake_paths[1]]
+                "path_length": len(initial_paths[1]) if len(initial_paths) > 1 else 0,
+                "coordinates": [[convert_numpy_types(x), convert_numpy_types(y)] for x, y in initial_paths[1]] if len(initial_paths) > 1 else []
             }
         },
+        "gap_filling_paths": [
+            {
+                "path_id": i,
+                "path_length": len(path),
+                "coordinates": [[convert_numpy_types(x), convert_numpy_types(y)] for x, y in path]
+            }
+            for i, path in enumerate(gap_filling_paths)
+        ],
         "scaffold_array": {
             "shape": list(scaffold_array.shape),
             "data": scaffold_array.tolist()  # Full 2D array as nested lists
         },
         "summary": {
             "total_snakes": len(snake_paths),
+            "initial_snake_count": len(initial_paths),
+            "gap_filling_snake_count": len(gap_filling_paths),
             "total_coordinates": sum(len(path) for path in snake_paths),
-            "left_snake_points": len(snake_paths[0]),
-            "right_snake_points": len(snake_paths[1])
+            "initial_coordinates": sum(len(path) for path in initial_paths),
+            "gap_filling_coordinates": sum(len(path) for path in gap_filling_paths),
+            "coverage_improvement": {
+                "initial_density_percent": float(sum(len(path) for path in initial_paths) / (scaffold_array.shape[0] * scaffold_array.shape[1]) * 100) if initial_paths else 0.0,
+                "final_density_percent": float(np.sum(scaffold_array) / (scaffold_array.shape[0] * scaffold_array.shape[1]) * 100),
+                "improvement_factor": float(len(gap_filling_paths) / len(initial_paths)) if initial_paths else 0.0
+            }
         }
     }
     
@@ -99,6 +340,8 @@ def save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, output_pat
     
     print(f"Snake paths saved to JSON: {output_path}")
     print(f"Total coordinates saved: {json_data['summary']['total_coordinates']}")
+    if gap_filling_paths:
+        print(f"Gap-filling improvement: +{len(gap_filling_paths)} paths, +{sum(len(path) for path in gap_filling_paths)} points")
     
     return json_data
 
@@ -423,7 +666,120 @@ class Snake:
         """Get the last few points of the path for collision detection"""
         return set(self.path[-num_points:])
 
-def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True):
+class GapFillingSnake(Snake):
+    """
+    Modified Snake class for gap filling that respects existing scaffold paths.
+    """
+    def __init__(self, start_x, start_y, initial_direction, snake_id, scaffold_array):
+        super().__init__(start_x, start_y, initial_direction, snake_id, scaffold_array)
+    
+    def move_step(self, gap_mask, occupied_points, other_snake=None):
+        """
+        Modified move step that respects existing scaffold paths.
+        """
+        # Check if we've reached the boundary of the gap area
+        if self.current_y >= gap_mask.shape[0] - 2:
+            return False
+            
+        # Check if current line has any gap pixels to fill
+        if not self.check_line_has_shape(gap_mask, self.current_y):
+            return False
+            
+        moved = False
+        
+        if self.state == "to_edge":
+            # Move in current direction within gap boundaries
+            new_x = self.current_x + self.dx * step_size
+            new_y = self.current_y + self.dy * step_size
+            
+            # Check if next position is within gap area and not already filled
+            if (0 <= new_x < gap_mask.shape[1] and 0 <= new_y < gap_mask.shape[0] and 
+                is_point_in_shape(gap_mask, new_x, new_y) and
+                self.scaffold_array[new_y, new_x] == 0):  # Not already filled
+                
+                # Check for collision with other snake
+                collision = other_snake and (new_x, new_y) in other_snake.get_recent_points(8)
+                
+                if not collision:
+                    self.current_x = new_x
+                    self.current_y = new_y
+                    self.path.append((self.current_x, self.current_y))
+                    occupied_points.add((self.current_x, self.current_y))
+                    # Update scaffold array
+                    self.update_scaffold_array(self.current_x, self.current_y)
+                    moved = True
+                else:
+                    # Collision detected, start turning sequence
+                    if self.turn_type == "right":
+                        self.turn_90_left()
+                        self.turn_type = "left"
+                    else:
+                        self.turn_90_right()
+                        self.turn_type = "right"
+                    
+                    self.state = f"turn_{self.turn_type}_down"
+                    self.down_counter = 0
+            else:
+                # Hit boundary, start turning sequence
+                if self.turn_type == "right":
+                    self.turn_90_right()
+                    self.state = "turn_right_down"
+                else:
+                    self.turn_90_left()
+                    self.state = "turn_left_down"
+                self.down_counter = 0
+                
+        elif self.state == "turn_right_down":
+            if self.down_counter < down_pixels:
+                new_y = self.current_y + 1
+                if (new_y < gap_mask.shape[0] and 
+                    is_point_in_shape(gap_mask, self.current_x, new_y) and
+                    self.scaffold_array[new_y, self.current_x] == 0):  # Not already filled
+                    
+                    if self.check_line_has_shape(gap_mask, new_y):
+                        self.current_y = new_y
+                        self.path.append((self.current_x, self.current_y))
+                        occupied_points.add((self.current_x, self.current_y))
+                        self.update_scaffold_array(self.current_x, self.current_y)
+                        self.down_counter += 1
+                        moved = True
+                    else:
+                        return False
+                else:
+                    self.down_counter = down_pixels
+                    
+            if self.down_counter >= down_pixels:
+                self.turn_90_right()
+                self.state = "to_edge"
+                self.turn_type = "left"
+                
+        elif self.state == "turn_left_down":
+            if self.down_counter < down_pixels:
+                new_y = self.current_y + 1
+                if (new_y < gap_mask.shape[0] and 
+                    is_point_in_shape(gap_mask, self.current_x, new_y) and
+                    self.scaffold_array[new_y, self.current_x] == 0):  # Not already filled
+                    
+                    if self.check_line_has_shape(gap_mask, new_y):
+                        self.current_y = new_y
+                        self.path.append((self.current_x, self.current_y))
+                        occupied_points.add((self.current_x, self.current_y))
+                        self.update_scaffold_array(self.current_x, self.current_y)
+                        self.down_counter += 1
+                        moved = True
+                    else:
+                        return False
+                else:
+                    self.down_counter = down_pixels
+                    
+            if self.down_counter >= down_pixels:
+                self.turn_90_left()
+                self.state = "to_edge"
+                self.turn_type = "right"
+        
+        return moved or self.current_y < gap_mask.shape[0] - 2
+
+def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, enable_gap_filling=True):
     """Generate the snake pattern for the given shape mask and optionally return scaffold array"""
     # Find starting point
     start_point = find_topmost_point(mask)
@@ -445,6 +801,8 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True):
     occupied_points = set()
     occupied_points.add((start_x, start_y))
     
+    print("🐍 Generating initial snake patterns...")
+    
     # Run the snakes until they're done
     max_iterations = 15000  # Increased for more complex patterns
     iteration = 0
@@ -458,11 +816,15 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True):
             
         iteration += 1
     
-    snake_paths = [left_snake.path, right_snake.path]
+    initial_snake_paths = [left_snake.path, right_snake.path]
+    
+    # Report initial results
+    initial_points = sum(len(path) for path in initial_snake_paths)
+    print(f"✅ Initial snakes complete: {len(initial_snake_paths)} paths, {initial_points} points")
     
     if return_array:
-        # Add crossovers to the scaffold array
-        for path in snake_paths:
+        # Add crossovers to the scaffold array for initial paths
+        for path in initial_snake_paths:
             crossovers = add_crossovers_to_path(path)
             for crossover_x, crossover_y in crossovers:
                 # Mark crossover as a small circle (3x3 area)
@@ -472,9 +834,29 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True):
                         if (0 <= new_x < array_shape[1] and 0 <= new_y < array_shape[0]):
                             scaffold_array[new_y, new_x] = 1
         
-        return snake_paths, scaffold_array
+        # Perform recursive gap filling if enabled
+        gap_filling_paths = []
+        if enable_gap_filling:
+            gap_filling_paths = recursive_gap_filling(scaffold_array, mask, max_iterations=10)
+            gap_points = sum(len(path) for path in gap_filling_paths)
+            if gap_points > 0:
+                print(f"🎯 Gap filling added: {len(gap_filling_paths)} paths, {gap_points} points")
+        
+        # Combine all paths
+        all_snake_paths = initial_snake_paths + gap_filling_paths
+        
+        # Final statistics
+        total_points = sum(len(path) for path in all_snake_paths)
+        final_density = np.sum(scaffold_array) / (scaffold_array.shape[0] * scaffold_array.shape[1]) * 100
+        
+        print(f"🎉 Pattern generation complete:")
+        print(f"   📊 Total paths: {len(all_snake_paths)} ({len(initial_snake_paths)} initial + {len(gap_filling_paths)} gap-filling)")
+        print(f"   📍 Total points: {total_points} ({initial_points} initial + {total_points - initial_points} gap-filling)")
+        print(f"   🎯 Final scaffold density: {final_density:.2f}%")
+        
+        return all_snake_paths, scaffold_array
     else:
-        return snake_paths
+        return initial_snake_paths
 
 # For backwards compatibility, create a function that only returns paths
 def generate_snake_pattern_legacy(mask):
@@ -590,6 +972,70 @@ def visualize_snake_pattern(mask, snake_paths, output_path="output.png"):
     
     return result_img
 
+def visualize_snake_pattern_enhanced(mask, snake_paths, output_path="output_enhanced.png"):
+    """Visualize the snake pattern with different colors for initial vs gap-filling paths"""
+    # Create colored output image
+    result_img = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+    
+    # Colors: Green/Red for initial snakes, Blue/Orange for gap-filling
+    initial_colors = [(0, 255, 0), (255, 0, 0)]  # Green, Red
+    gap_colors = [(255, 165, 0), (0, 100, 255), (255, 0, 255), (0, 255, 255)]  # Orange, Blue, Magenta, Cyan
+    
+    # Draw snake paths
+    for i, path in enumerate(snake_paths):
+        # Determine color based on path index (first 2 are initial)
+        if i < 2:
+            color = initial_colors[i % len(initial_colors)]
+            line_thickness = 2
+        else:
+            color = gap_colors[(i - 2) % len(gap_colors)]
+            line_thickness = 1  # Thinner lines for gap-filling paths
+        
+        # Draw path with safety checks
+        for j in range(len(path) - 1):
+            pt1 = path[j]
+            pt2 = path[j + 1]
+            
+            # Ensure points are tuples of 2 integers
+            if (isinstance(pt1, (tuple, list)) and len(pt1) == 2 and
+                isinstance(pt2, (tuple, list)) and len(pt2) == 2):
+                try:
+                    pt1 = (int(pt1[0]), int(pt1[1]))
+                    pt2 = (int(pt2[0]), int(pt2[1]))
+                    cv2.line(result_img, pt1, pt2, color, line_thickness)
+                except Exception as e:
+                    print(f"Warning: Error drawing line from {pt1} to {pt2}: {e}")
+                    continue
+        
+        # Add crossovers with path-specific colors
+        try:
+            crossovers = add_crossovers_to_path(path)
+            for crossover in crossovers:
+                if isinstance(crossover, (tuple, list)) and len(crossover) == 2:
+                    crossover = (int(crossover[0]), int(crossover[1]))
+                    cv2.circle(result_img, crossover, 2, color, -1)  # Same color as path
+        except Exception as e:
+            print(f"Warning: Error adding crossovers for path {i}: {e}")
+    
+    # Add legend
+    legend_y = 30
+    cv2.putText(result_img, "Initial Paths:", (10, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+    cv2.line(result_img, (150, legend_y - 5), (200, legend_y - 5), initial_colors[0], 3)
+    cv2.line(result_img, (210, legend_y - 5), (260, legend_y - 5), initial_colors[1], 3)
+    
+    if len(snake_paths) > 2:
+        legend_y += 25
+        cv2.putText(result_img, "Gap-Fill Paths:", (10, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        for i, gap_color in enumerate(gap_colors[:min(4, len(snake_paths) - 2)]):
+            x_start = 150 + i * 30
+            cv2.line(result_img, (x_start, legend_y - 5), (x_start + 20, legend_y - 5), gap_color, 2)
+    
+    # Save the enhanced visualization
+    cv2.imwrite(output_path, result_img)
+    print(f"Enhanced visualization saved to: {output_path}")
+    
+    return result_img
+
 def create_test_shapes():
     """Create various test shapes"""
     height, width = 400, 400
@@ -653,24 +1099,36 @@ if __name__ == "__main__":
     
     # Generate snake pattern
     print("Generating snake pattern...")
-    snake_paths, scaffold_array = generate_snake_pattern(mask, array_shape=(300, 300), return_array=True)
+    snake_paths, scaffold_array = generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, enable_gap_filling=True)
     
-    # Array is now generated simultaneously during path generation!
-    print("Scaffold array generated simultaneously during path generation...")
+    # Save coordinates to JSON with gap-filling information
+    json_filename = f"snake_paths_{shape_name}.json"
+    json_data = save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, json_filename, gap_filling_enabled=True)
     
+    # Enhanced statistics reporting
+    print(f"\n📊 FINAL RESULTS:")
     print(f"Scaffold array shape: {scaffold_array.shape}")
     print(f"Number of scaffold pixels: {np.sum(scaffold_array)}")
     print(f"Scaffold density: {np.sum(scaffold_array) / (scaffold_array.shape[0] * scaffold_array.shape[1]) * 100:.2f}%")
     
-    # Save coordinates to JSON instead of printing
-    json_filename = f"snake_paths_{shape_name}.json"
-    json_data = save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, json_filename)
+    initial_count = json_data['summary']['initial_snake_count']
+    gap_count = json_data['summary']['gap_filling_snake_count']
+    initial_points = json_data['summary']['initial_coordinates']
+    gap_points = json_data['summary']['gap_filling_coordinates']
+    
+    print(f"Snake paths breakdown:")
+    print(f"   🐍 Initial snakes: {initial_count} paths ({initial_points:,} points)")
+    if gap_count > 0:
+        print(f"   🔍 Gap-filling snakes: {gap_count} paths ({gap_points:,} points)")
+        improvement = (gap_points / initial_points * 100) if initial_points > 0 else 0
+        print(f"   📈 Coverage improvement: +{improvement:.1f}% more points")
+    print(f"   📊 Total: {len(snake_paths)} paths ({initial_points + gap_points:,} points)")
     
     # Visualize the scaffold array
     print("Visualizing scaffold array...")
     scaffold_fig = visualize_scaffold_array(
         scaffold_array, 
-        title=f"Scaffold Array - {shape_name.title()}", 
+        title=f"Enhanced Scaffold Array - {shape_name.title()}", 
         save_path=f"scaffold_array_{shape_name}.png"
     )
     
@@ -687,7 +1145,9 @@ if __name__ == "__main__":
     # Example: Access the JSON data for further processing
     print(f"\nJSON file contains:")
     print(f"- Total coordinates: {json_data['summary']['total_coordinates']}")
-    print(f"- Left snake points: {json_data['summary']['left_snake_points']}")
-    print(f"- Right snake points: {json_data['summary']['right_snake_points']}")
+    print(f"- Initial paths: {json_data['summary']['initial_snake_count']}")
+    print(f"- Gap-filling paths: {json_data['summary']['gap_filling_snake_count']}")
     print(f"- Scaffold array shape: {json_data['scaffold_array']['shape']}")
-    print(f"- Algorithm parameters: {json_data['metadata']['parameters']}") 
+    print(f"- Algorithm parameters: {json_data['metadata']['parameters']}")
+    if gap_count > 0:
+        print(f"- Coverage improvement: {json_data['summary']['coverage_improvement']['improvement_factor']:.2f}x more paths") 

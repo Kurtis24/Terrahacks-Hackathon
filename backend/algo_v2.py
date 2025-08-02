@@ -359,7 +359,7 @@ def create_test_shapes():
 if __name__ == "__main__":
     # Try to load external image first, then create test shapes
     try:
-        mask = load_shape_image("circle_test.png")
+        mask = load_shape_image("output.png")
         print("Loaded triangle_test.png")
         shape_name = "loaded_triangle"
     except:

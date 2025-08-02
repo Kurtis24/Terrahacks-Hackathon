@@ -124,6 +124,6 @@ if __name__ == "__main__":
     print("=" * 40)
 
     user_input = input("\nWhat shape would you like me to generate? ")
-    final_prompt = f"Generate a white outline of a {user_input} with a black background. The design should be basic and have no details, and ensuring all parts are continuously connected and everything is within the outline is filled in with the color white. Make it so that it usally starts narrow at the top and widens as it moves down."
+    final_prompt = f"Generate a white shadow of a {user_input} with a black background. The design should be basic and have no details, and ensuring all parts are continuously connected and everything is within the outline is filled in with the color white. Make it so that it usally starts narrow at the top and widens as it moves down."
     generate_pollinations_image(final_prompt)
     

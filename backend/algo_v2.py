@@ -28,9 +28,9 @@ from scipy.spatial.distance import cdist
 from collections import deque
 
 # === Parameters ===
-step_size = 1                   # Step size for snake movement (smaller for more precise turns)
-down_pixels = 20                # Pixels to move down during turns
-crossover_spacing = 15          # Distance between crossovers
+step_size = 5                 # Step size for snake movement (smaller for more precise turns)
+down_pixels = 8                # Pixels to move down during turns
+crossover_spacing = 10          # Distance between crossovers
 
 def load_shape_image(image_path):
     """Load and preprocess the black and white shape image"""

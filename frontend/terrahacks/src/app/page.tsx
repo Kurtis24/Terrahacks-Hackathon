@@ -107,12 +107,8 @@ export default function Home() {
       <div className="w-80 bg-gray-800 border-r border-gray-700 flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-gray-700">
-          <h1 className="text-xl font-bold text-white mb-1">
-            Snake DNA Renderer
-          </h1>
-          <p className="text-sm text-gray-400">
-            Generate 3D DNA structures from shapes
-          </p>
+          <h1 className="text-xl font-bold text-white mb-1">NanoWorks</h1>
+          <p className="text-sm text-gray-400">Vibe out 3D DNA structures</p>
         </div>
 
         {/* Controls */}
@@ -233,7 +229,7 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-pink-500 rounded"></div>
-                <span className="text-gray-300">Pink Sugar (A,T,C,G)</span>
+                <span className="text-gray-300">DNA Scaffolding (A,T,C,G)</span>
               </div>
             </div>
           </div>

@@ -5,10 +5,25 @@ export function renderSingleStrandDNA(
   dnaArray: number[][],
   containerId: string
 ) {
-  // Clear existing content
+  // Clear existing content and dispose of previous Three.js objects
   const container = document.getElementById(containerId);
   if (!container) return;
-  container.innerHTML = "";
+
+  // Clean up any existing Three.js content
+  while (container.firstChild) {
+    const child = container.firstChild as HTMLElement;
+    // If it's a canvas element from Three.js, clean it up properly
+    if (child instanceof HTMLCanvasElement) {
+      const renderer = (
+        child as HTMLCanvasElement & { __three_renderer?: THREE.WebGLRenderer }
+      ).__three_renderer;
+      if (renderer) {
+        renderer.dispose();
+        renderer.forceContextLoss();
+      }
+    }
+    container.removeChild(child);
+  }
 
   // Scene setup
   const scene = new THREE.Scene();
@@ -22,6 +37,13 @@ export function renderSingleStrandDNA(
     antialias: true,
     powerPreference: "high-performance", // Prefer high performance GPU
   });
+
+  // Store renderer reference for cleanup
+  (
+    renderer.domElement as HTMLCanvasElement & {
+      __three_renderer?: THREE.WebGLRenderer;
+    }
+  ).__three_renderer = renderer;
 
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.appendChild(renderer.domElement);
@@ -53,6 +75,22 @@ export function renderSingleStrandDNA(
   const thymineMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff }); // Blue for thymine
   const cytosineMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); // Green for cytosine
   const guanineMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 }); // Yellow for guanine
+
+  // Store all materials for cleanup
+  const allMaterials = [
+    sugarMaterial,
+    pinkSugarMaterial,
+    connectionMaterial,
+    pinkConnectionMaterial,
+    basePairMaterial,
+    adenineMaterial,
+    thymineMaterial,
+    cytosineMaterial,
+    guanineMaterial,
+  ];
+
+  // Store all geometries for cleanup
+  const allGeometries = [sugarGeometry, baseGeometry, connectionGeometry];
 
   const dnaStrand = new THREE.Object3D();
   const holder = new THREE.Object3D();
@@ -559,13 +597,26 @@ export function renderSingleStrandDNA(
   controls.target.set(0, 0, 0);
   controls.update();
 
-  // Animation loop (optimized for performance)
+  // Animation loop (optimized for performance and memory usage)
   let lastTime = 0;
+  let animationId: number;
   const targetFPS = 60;
   const frameInterval = 1000 / targetFPS;
+  let isVisible = true;
+
+  // Reduce frame rate when page is not visible
+  const handleVisibilityChange = () => {
+    isVisible = !document.hidden;
+  };
+  document.addEventListener("visibilitychange", handleVisibilityChange);
 
   function animate(currentTime: number = 0) {
-    requestAnimationFrame(animate);
+    animationId = requestAnimationFrame(animate);
+
+    // Skip animation if page is not visible to save CPU/GPU
+    if (!isVisible) {
+      return;
+    }
 
     // Throttle to target FPS for consistent performance
     if (currentTime - lastTime < frameInterval) {
@@ -627,9 +678,62 @@ export function renderSingleStrandDNA(
 
   window.addEventListener("resize", handleResize);
 
-  return () => {
+  // Enhanced cleanup function to prevent memory leaks
+  const cleanup = () => {
+    // Cancel animation frame
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+    }
+
+    // Remove event listeners
     window.removeEventListener("resize", handleResize);
-    controls.dispose(); // Clean up controls
-    container.innerHTML = "";
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+
+    // Dispose of controls
+    controls.dispose();
+
+    // Dispose of all geometries
+    allGeometries.forEach((geometry) => geometry.dispose());
+
+    // Dispose of all materials
+    allMaterials.forEach((material) => material.dispose());
+
+    // Recursively dispose of all objects in the scene
+    const disposeObject = (obj: THREE.Object3D) => {
+      if (obj instanceof THREE.Mesh) {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((material) => material.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
+      }
+      // Dispose of children
+      while (obj.children.length > 0) {
+        const child = obj.children[0];
+        obj.remove(child);
+        disposeObject(child);
+      }
+    };
+
+    disposeObject(scene);
+
+    // Dispose of renderer
+    renderer.dispose();
+    renderer.forceContextLoss();
+
+    // Clear the container
+    if (container) {
+      container.innerHTML = "";
+    }
+
+    // Force garbage collection hint (if available)
+    if (window.gc) {
+      window.gc();
+    }
   };
+
+  return cleanup;
 }

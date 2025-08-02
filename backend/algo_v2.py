@@ -49,9 +49,23 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
     green_array = np.zeros((target_size, target_size), dtype=np.uint8)
     red_array = np.zeros((target_size, target_size), dtype=np.uint8)
     
-    # Scale factor for mapping to 300x300 grid
-    scale_x = target_size / scaffold_array.shape[1] if scaffold_array.shape[1] > 0 else 1
-    scale_y = target_size / scaffold_array.shape[0] if scaffold_array.shape[0] > 0 else 1
+    # Get the original image dimensions from the first snake path to determine scaling
+    if len(snake_paths) > 0 and len(snake_paths[0]) > 0:
+        # Find max coordinates to determine original image size
+        all_x = [x for path in snake_paths for x, y in path]
+        all_y = [y for path in snake_paths for x, y in path]
+        if all_x and all_y:
+            max_x = max(all_x)
+            max_y = max(all_y)
+            # Scale factor for mapping to target_size grid
+            scale_x = target_size / (max_x + 1) if max_x > 0 else 1
+            scale_y = target_size / (max_y + 1) if max_y > 0 else 1
+        else:
+            scale_x = scale_y = 1
+    else:
+        scale_x = scale_y = 1
+    
+    print(f"   🔍 Scaling factors: x={scale_x:.3f}, y={scale_y:.3f}")
     
     # Draw green lines (left snake - index 0)
     if len(snake_paths) > 0:

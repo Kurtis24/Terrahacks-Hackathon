@@ -18,5 +18,5 @@ def generate_pollinations_image(prompt, output_file="output.png"):
 
 if __name__ == "__main__":
     user_input = input("What would you like me to draw? ")
-    final_prompt = f"Black silhouette of {user_input} on a white background, minimalistic, no details, solid fill"
+    final_prompt = f"White silhouette of {user_input} on a black background, minimalistic, no details, solid fill"
     generate_pollinations_image(final_prompt)

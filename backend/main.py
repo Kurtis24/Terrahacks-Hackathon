@@ -20,12 +20,8 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     
     # Create unique filenames with timestamp
     timestamp = int(time.time())
-    json_filename = f"snake_paths_{shape_name}_{timestamp}.json"
     output_filename = f"snake_pattern_{shape_name}_{timestamp}.png"
-    
-    # Save to JSON file
-    print("💾 Saving coordinates to JSON...")
-    json_data = save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, json_filename)
+    json_filename = f"path.json"
     
     # Print detailed analysis
     print(f"\n📊 ALGORITHM RESULTS:")
@@ -42,11 +38,6 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     print(f"   📈 Total Points Generated: {total_points:,}")
     print(f"   📏 Average Points per Snake: {total_points/len(snake_paths):,.0f}")
     
-    # Scaffold array information
-    print(f"   📋 Scaffold Array Shape: {scaffold_array.shape}")
-    print(f"   🎯 Scaffold Pixels: {np.sum(scaffold_array):,}")
-    print(f"   📊 Scaffold Density: {np.sum(scaffold_array) / (scaffold_array.shape[0] * scaffold_array.shape[1]) * 100:.2f}%")
-    
     # Calculate coverage metrics
     shape_pixels = np.sum(mask == 255)
     coverage_ratio = total_points / shape_pixels if shape_pixels > 0 else 0
@@ -54,9 +45,19 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     print(f"   📐 Shape Dimensions: {mask.shape[1]}x{mask.shape[0]} pixels")
     print(f"   ⚪ Shape Area: {shape_pixels:,} white pixels")
     
-    # Create visualization
+    # Create visualization first
     print(f"\n🎨 Creating visualization...")
     result = visualize_snake_pattern(mask, snake_paths, output_filename)
+    
+    # Save line coordinates to JSON for 300x300 grid after visualization
+    print("💾 Saving line coordinates to JSON...")
+    json_data = save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, json_filename, target_size=300)
+    
+    # Line coordinates information
+    print(f"   📋 Grid Size: 300x300 pixels")
+    print(f"   🟢 Green Line Pixels: {json_data['summary']['total_green_pixels']:,}")
+    print(f"   🔴 Red Line Pixels: {json_data['summary']['total_red_pixels']:,}")
+    print(f"   📊 Total Line Pixels: {json_data['summary']['total_line_pixels']:,}")
     
     # Create scaffold array visualization
     scaffold_filename = f"scaffold_array_{shape_name}_{timestamp}.png"
@@ -139,17 +140,47 @@ def process_existing_image(image_path):
         print(f"   🐍 Snake Pattern Result: {result_file}")
         print(f"   📋 JSON Data: {json_file}")
         
-        return mask, snake_paths, result_file
+        return mask, snake_paths, json_file, result_file
         
     except Exception as e:
         print(f"❌ Error processing image: {str(e)}")
-        return None, None, None
+        return None, None, None, None
+
+def process_test_shape(shape_type="triangle"):
+    """
+    Process a test shape with snake pattern algorithm
+    """
+    print(f"🔧 Creating test {shape_type} shape...")
+    shapes = create_test_shapes()
+    
+    if shape_type not in shapes:
+        print(f"❌ Unknown shape type: {shape_type}")
+        print(f"   Available shapes: {list(shapes.keys())}")
+        return None, None, None, None
+    
+    mask = shapes[shape_type]
+    print(f"✅ Created {shape_type} shape: {mask.shape[1]}x{mask.shape[0]} pixels")
+    
+    # Save the test shape for reference
+    test_image_path = f"test_{shape_type}_shape.png"
+    cv2.imwrite(test_image_path, mask)
+    print(f"💾 Test shape saved as: {test_image_path}")
+    
+    # Run snake pattern analysis
+    snake_paths, scaffold_array, json_file, result_file = run_snake_pattern_analysis(mask, f"test_{shape_type}")
+    
+    print(f"\n🎉 PROCESSING COMPLETE!")
+    print(f"   📄 Test Shape: {test_image_path}")
+    print(f"   🐍 Snake Pattern Result: {result_file}")
+    print(f"   📊 JSON Coordinates: {json_file}")
+    
+    return mask, snake_paths, json_file, result_file
 
 if __name__ == "__main__":
     print("🐍 SNAKE PATTERN GENERATOR")
     print("=" * 40)
 
     user_input = input("\nWhat shape would you like me to generate? ")
-    final_prompt = f"Generate a white shadow of a {user_input} with a black background. The design should be basic and have no details, and ensuring all parts are continuously connected and everything is within the outline is filled in with the color white. Make it so that it usally starts narrow at the top and widens as it moves down."
+    final_prompt = f"Generate a white shadow of a {user_input} with a black background. The design should be basic and have no details, and ensuring all parts are continuously connected and everything is within the outline is filled in with the color white. Make it so that it usually starts narrow at the top and widens as it moves down."
     generate_pollinations_image(final_prompt)
     

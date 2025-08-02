@@ -34,62 +34,94 @@ step_size = 5                 # Step size for snake movement (smaller for more p
 down_pixels = 8                # Pixels to move down during turns
 crossover_spacing = 10          # Distance between crossovers
 
-def save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, output_path="snake_paths.json"):
+def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, output_path="line_coordinates.json", target_size=300):
     """
-    Save snake paths and scaffold data to JSON format
+    Save line coordinates for green and red lines on a 300x300 pixel grid
     
     Args:
-        snake_paths: List of snake paths
+        snake_paths: List of snake paths [left_snake, right_snake]
         scaffold_array: 2D numpy array of the scaffold
         shape_name: Name of the shape processed
         output_path: Path to save the JSON file
+        target_size: Size of the target grid (default 300x300)
     """
-    # Convert numpy array data types to Python native types for JSON serialization
-    def convert_numpy_types(obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return obj
+    # Create separate arrays for green (left) and red (right) lines
+    green_array = np.zeros((target_size, target_size), dtype=np.uint8)
+    red_array = np.zeros((target_size, target_size), dtype=np.uint8)
     
-    # Prepare the data structure
+    # Scale factor for mapping to 300x300 grid
+    scale_x = target_size / scaffold_array.shape[1] if scaffold_array.shape[1] > 0 else 1
+    scale_y = target_size / scaffold_array.shape[0] if scaffold_array.shape[0] > 0 else 1
+    
+    # Draw green lines (left snake - index 0)
+    if len(snake_paths) > 0:
+        for i in range(len(snake_paths[0]) - 1):
+            x0, y0 = snake_paths[0][i]
+            x1, y1 = snake_paths[0][i + 1]
+            
+            # Scale coordinates to 300x300 grid
+            x0_scaled = int(x0 * scale_x)
+            y0_scaled = int(y0 * scale_y)
+            x1_scaled = int(x1 * scale_x)
+            y1_scaled = int(y1 * scale_y)
+            
+            draw_line_in_array(green_array, x0_scaled, y0_scaled, x1_scaled, y1_scaled, value=1)
+    
+    # Draw red lines (right snake - index 1)
+    if len(snake_paths) > 1:
+        for i in range(len(snake_paths[1]) - 1):
+            x0, y0 = snake_paths[1][i]
+            x1, y1 = snake_paths[1][i + 1]
+            
+            # Scale coordinates to 300x300 grid
+            x0_scaled = int(x0 * scale_x)
+            y0_scaled = int(y0 * scale_y)
+            x1_scaled = int(x1 * scale_x)
+            y1_scaled = int(y1 * scale_y)
+            
+            draw_line_in_array(red_array, x0_scaled, y0_scaled, x1_scaled, y1_scaled, value=1)
+    
+    # Extract coordinates where lines exist
+    green_coordinates = []
+    red_coordinates = []
+    
+    # Find all green line coordinates
+    green_y_coords, green_x_coords = np.where(green_array == 1)
+    for i in range(len(green_x_coords)):
+        green_coordinates.append([int(green_x_coords[i]), int(green_y_coords[i])])
+    
+    # Find all red line coordinates
+    red_y_coords, red_x_coords = np.where(red_array == 1)
+    for i in range(len(red_x_coords)):
+        red_coordinates.append([int(red_x_coords[i]), int(red_y_coords[i])])
+    
+    # Prepare the simplified JSON data structure
     json_data = {
         "metadata": {
             "timestamp": datetime.now().isoformat(),
             "shape_name": shape_name,
-            "algorithm_version": "algo_v2",
-            "parameters": {
-                "step_size": step_size,
-                "down_pixels": down_pixels,
-                "crossover_spacing": crossover_spacing
-            },
-            "scaffold_info": {
-                "array_shape": list(scaffold_array.shape),
-                "total_pixels": int(np.sum(scaffold_array)),
-                "density_percent": float(np.sum(scaffold_array) / (scaffold_array.shape[0] * scaffold_array.shape[1]) * 100)
-            }
+            "grid_size": [target_size, target_size],
+            "algorithm_version": "algo_v2"
         },
-        "snake_paths": {
-            "left_snake": {
-                "path_length": len(snake_paths[0]),
-                "coordinates": [[convert_numpy_types(x), convert_numpy_types(y)] for x, y in snake_paths[0]]
+        "line_coordinates": {
+            "green_lines": {
+                "color": "green",
+                "snake_type": "left_snake",
+                "total_pixels": len(green_coordinates),
+                "coordinates": green_coordinates
             },
-            "right_snake": {
-                "path_length": len(snake_paths[1]),
-                "coordinates": [[convert_numpy_types(x), convert_numpy_types(y)] for x, y in snake_paths[1]]
+            "red_lines": {
+                "color": "red", 
+                "snake_type": "right_snake",
+                "total_pixels": len(red_coordinates),
+                "coordinates": red_coordinates
             }
-        },
-        "scaffold_array": {
-            "shape": list(scaffold_array.shape),
-            "data": scaffold_array.tolist()  # Full 2D array as nested lists
         },
         "summary": {
-            "total_snakes": len(snake_paths),
-            "total_coordinates": sum(len(path) for path in snake_paths),
-            "left_snake_points": len(snake_paths[0]),
-            "right_snake_points": len(snake_paths[1])
+            "grid_dimensions": f"{target_size}x{target_size}",
+            "total_green_pixels": len(green_coordinates),
+            "total_red_pixels": len(red_coordinates),
+            "total_line_pixels": len(green_coordinates) + len(red_coordinates)
         }
     }
     
@@ -97,8 +129,10 @@ def save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, output_pat
     with open(output_path, 'w') as f:
         json.dump(json_data, f, indent=2, separators=(',', ': '))
     
-    print(f"Snake paths saved to JSON: {output_path}")
-    print(f"Total coordinates saved: {json_data['summary']['total_coordinates']}")
+    print(f"Line coordinates saved to JSON: {output_path}")
+    print(f"Green line pixels: {len(green_coordinates)}")
+    print(f"Red line pixels: {len(red_coordinates)}")
+    print(f"Total line pixels on {target_size}x{target_size} grid: {len(green_coordinates) + len(red_coordinates)}")
     
     return json_data
 
@@ -627,67 +661,14 @@ def create_test_shapes():
     
     return shapes
 
-# === Main Execution ===
+# === Main Execution (for testing only) ===
 if __name__ == "__main__":
-    # Try to load external image first, then create test shapes
-    try:
-        mask = load_shape_image("output.png")
-        print("Loaded triangle_test.png")
-        shape_name = "loaded_triangle"
-    except:
-        # Create test shapes
-        print("Creating test shapes...")
-        shapes = create_test_shapes()
-        
-        # Use hexagon as default
-        shape_name = "hexagon"  
-        mask = shapes[shape_name]
-        print(f"Created test {shape_name}")
-        
-        # Save test shapes for future use
-        cv2.imwrite("triangle_test.png", shapes['triangle'])
-        cv2.imwrite("hexagon_test.png", shapes['hexagon'])
-        cv2.imwrite("square_test.png", shapes['square'])
-        cv2.imwrite("circle_test.png", shapes['circle'])
-        print("Saved all test shapes for future use")
+    print("⚠️  Use main.py instead for the full workflow!")
+    print("   This file is now a module. Run: python main.py")
     
-    # Generate snake pattern
-    print("Generating snake pattern...")
+    # Optional: Quick test functionality
+    print("\n🧪 Running quick test of algorithm functions...")
+    shapes = create_test_shapes()
+    mask = shapes['triangle']
     snake_paths, scaffold_array = generate_snake_pattern(mask, array_shape=(300, 300), return_array=True)
-    
-    # Array is now generated simultaneously during path generation!
-    print("Scaffold array generated simultaneously during path generation...")
-    
-    print(f"Scaffold array shape: {scaffold_array.shape}")
-    print(f"Number of scaffold pixels: {np.sum(scaffold_array)}")
-    print(f"Scaffold density: {np.sum(scaffold_array) / (scaffold_array.shape[0] * scaffold_array.shape[1]) * 100:.2f}%")
-    
-    # Save coordinates to JSON instead of printing
-    json_filename = f"snake_paths_{shape_name}.json"
-    json_data = save_snake_paths_to_json(snake_paths, scaffold_array, shape_name, json_filename)
-    
-    # Visualize the scaffold array
-    print("Visualizing scaffold array...")
-    scaffold_fig = visualize_scaffold_array(
-        scaffold_array, 
-        title=f"Scaffold Array - {shape_name.title()}", 
-        save_path=f"scaffold_array_{shape_name}.png"
-    )
-    
-    # Optional: Also create the traditional OpenCV visualization
-    print("Creating traditional visualization...")
-    output_filename = f"output_{shape_name}.png"
-    result = visualize_snake_pattern(mask, snake_paths, output_filename)
-    
-    print(f"Generated {len(snake_paths)} snake paths")
-    print(f"Snake paths and coordinates saved to: {json_filename}")
-    print(f"Traditional output saved as: {output_filename}")
-    print(f"Scaffold array visualization saved as: scaffold_array_{shape_name}.png")
-    
-    # Example: Access the JSON data for further processing
-    print(f"\nJSON file contains:")
-    print(f"- Total coordinates: {json_data['summary']['total_coordinates']}")
-    print(f"- Left snake points: {json_data['summary']['left_snake_points']}")
-    print(f"- Right snake points: {json_data['summary']['right_snake_points']}")
-    print(f"- Scaffold array shape: {json_data['scaffold_array']['shape']}")
-    print(f"- Algorithm parameters: {json_data['metadata']['parameters']}") 
+    print(f"✅ Test completed: Generated {len(snake_paths)} paths with {np.sum(scaffold_array)} scaffold pixels") 

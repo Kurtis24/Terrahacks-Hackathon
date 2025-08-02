@@ -116,7 +116,7 @@ export function flatArrayToGrid(
  * @returns 2D array representing the pattern
  */
 export function createSamplePattern(
-  pattern: "cross" | "diamond" | "border" | "checker" | number[][]
+  pattern: "cross" | "diamond" | "border" | "checker" | "corner" | number[][]
 ): number[][] {
   if (Array.isArray(pattern)) {
     return pattern;
@@ -157,6 +157,14 @@ export function createSamplePattern(
         [2, 0, 3, 0, 4],
         [0, 1, 0, 2, 0],
         [3, 0, 4, 0, 1],
+      ];
+
+    case "corner":
+      // Simple L-shape to test corner pipes
+      return [
+        [1, 1, 0],
+        [1, 0, 0],
+        [0, 0, 0],
       ];
 
     default:

@@ -11,6 +11,7 @@ import {
   CubeData,
 } from "@/utils/convert";
 import { revolveGridWithColors, RevolutionConfig } from "@/utils/dimension";
+import { PipeNetwork } from "@/components/PipeNetwork";
 
 // Component to render cubes from grid data
 function CubeGrid({
@@ -154,7 +155,9 @@ export default function GridDemo() {
     [4, 0, 1],
   ]);
   const [randomDensity, setRandomDensity] = useState(0.3);
-  const [isRevolutionMode, setIsRevolutionMode] = useState(false);
+  const [renderMode, setRenderMode] = useState<"cubes" | "revolved" | "pipes">(
+    "cubes"
+  );
   const [profileMode, setProfileMode] = useState<
     "outline" | "rightmost" | "average" | "max"
   >("outline");
@@ -206,20 +209,36 @@ export default function GridDemo() {
         />
 
         {/* Render the current grid pattern */}
-        {isRevolutionMode ? (
+        {renderMode === "cubes" && (
+          <CubeGrid gridData={currentGrid} yOffset={0} />
+        )}
+        {renderMode === "revolved" && (
           <RevolvedGrid
             gridData={currentGrid}
             yOffset={0}
             profileMode={profileMode}
           />
-        ) : (
-          <CubeGrid gridData={currentGrid} yOffset={0} />
+        )}
+        {renderMode === "pipes" && (
+          <PipeNetwork gridData={currentGrid} yOffset={0} />
         )}
 
         {/* Show multiple patterns side by side for comparison */}
         {selectedPattern === "cross" && (
           <>
-            {isRevolutionMode ? (
+            {renderMode === "cubes" && (
+              <>
+                <CubeGrid
+                  gridData={createSamplePattern("diamond")}
+                  yOffset={8}
+                />
+                <CubeGrid
+                  gridData={createSamplePattern("border")}
+                  yOffset={-8}
+                />
+              </>
+            )}
+            {renderMode === "revolved" && (
               <>
                 <RevolvedGrid
                   gridData={createSamplePattern("diamond")}
@@ -232,13 +251,14 @@ export default function GridDemo() {
                   profileMode={profileMode}
                 />
               </>
-            ) : (
+            )}
+            {renderMode === "pipes" && (
               <>
-                <CubeGrid
+                <PipeNetwork
                   gridData={createSamplePattern("diamond")}
                   yOffset={8}
                 />
-                <CubeGrid
+                <PipeNetwork
                   gridData={createSamplePattern("border")}
                   yOffset={-8}
                 />
@@ -262,11 +282,11 @@ export default function GridDemo() {
         {/* Rendering Mode Toggle */}
         <div className="bg-black/50 backdrop-blur-sm border border-white/20 rounded-lg p-4">
           <h3 className="text-lg font-bold mb-3">Rendering Mode</h3>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2">
             <button
-              onClick={() => setIsRevolutionMode(false)}
+              onClick={() => setRenderMode("cubes")}
               className={`px-3 py-2 rounded transition-colors ${
-                !isRevolutionMode
+                renderMode === "cubes"
                   ? "bg-blue-600 text-white"
                   : "bg-gray-600 text-gray-300 hover:bg-gray-500"
               }`}
@@ -274,9 +294,19 @@ export default function GridDemo() {
               Cubes
             </button>
             <button
-              onClick={() => setIsRevolutionMode(true)}
+              onClick={() => setRenderMode("pipes")}
               className={`px-3 py-2 rounded transition-colors ${
-                isRevolutionMode
+                renderMode === "pipes"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+              }`}
+            >
+              Pipes
+            </button>
+            <button
+              onClick={() => setRenderMode("revolved")}
+              className={`px-3 py-2 rounded transition-colors ${
+                renderMode === "revolved"
                   ? "bg-blue-600 text-white"
                   : "bg-gray-600 text-gray-300 hover:bg-gray-500"
               }`}
@@ -285,14 +315,15 @@ export default function GridDemo() {
             </button>
           </div>
           <p className="text-xs text-gray-400 mt-2">
-            {isRevolutionMode
-              ? "2D shapes revolved around Z-axis"
-              : "Standard cube visualization"}
+            {renderMode === "cubes" && "Standard cube visualization"}
+            {renderMode === "pipes" &&
+              "Connected pipe network based on adjacency"}
+            {renderMode === "revolved" && "2D shapes revolved around Z-axis"}
           </p>
         </div>
 
         {/* Profile Mode Controls (only show in revolution mode) */}
-        {isRevolutionMode && (
+        {renderMode === "revolved" && (
           <div className="bg-black/50 backdrop-blur-sm border border-white/20 rounded-lg p-4">
             <h3 className="text-lg font-bold mb-3">Profile Mode</h3>
             <div className="space-y-2">
@@ -475,6 +506,19 @@ export default function GridDemo() {
             </div>
           </div>
         </div>
+
+        {renderMode === "pipes" && (
+          <div className="border-t border-white/20 pt-3 mt-3">
+            <h3 className="text-sm font-semibold mb-2">Pipe Types</h3>
+            <div className="text-xs space-y-1">
+              <div>• 4 neighbors: Cross (+)</div>
+              <div>• 3 neighbors: T-pipe</div>
+              <div>• 2 neighbors: Straight/Corner</div>
+              <div>• 1 neighbor: End cap</div>
+              <div>• 0 neighbors: Sphere</div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

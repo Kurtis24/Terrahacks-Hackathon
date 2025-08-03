@@ -592,8 +592,17 @@ export function renderSingleStrandDNA(
   holder.add(dnaStrand);
   scene.add(holder);
 
-  // Reset camera position and controls to center on the DNA structure
-  camera.position.set(0, 0, 20); // Updated from 35 to 20
+  // Calculate camera position to frame middle 150x150 area
+  const frameSize = 150; // Target frame size in grid units
+  const unitSpacing = 6; // Spacing between nucleotides
+  const worldFrameSize = frameSize * unitSpacing; // 900 world units
+
+  // Calculate camera distance needed to frame the target area
+  const fov = camera.fov * (Math.PI / 180); // Convert to radians
+  const cameraDistance = worldFrameSize / 2 / Math.tan(fov / 2);
+
+  // Reset camera position and controls to center on the middle 150x150 area
+  camera.position.set(0, 0, Math.max(cameraDistance, 35)); // Ensure minimum distance
   controls.target.set(0, 0, 0);
   controls.update();
 
@@ -603,12 +612,46 @@ export function renderSingleStrandDNA(
   const targetFPS = 60;
   const frameInterval = 1000 / targetFPS;
   let isVisible = true;
+  let isSpinning = false; // Track spinning state
 
   // Reduce frame rate when page is not visible
   const handleVisibilityChange = () => {
     isVisible = !document.hidden;
   };
   document.addEventListener("visibilitychange", handleVisibilityChange);
+
+  // Add double-click event listener to toggle spinning
+  const handleDoubleClick = () => {
+    isSpinning = !isSpinning;
+  };
+  renderer.domElement.addEventListener("dblclick", handleDoubleClick);
+
+  // Keyboard navigation
+  const keyState = {
+    ArrowUp: false,
+    ArrowDown: false,
+    ArrowLeft: false,
+    ArrowRight: false,
+    Shift: false,
+  };
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.code in keyState) {
+      keyState[event.code as keyof typeof keyState] = true;
+      event.preventDefault();
+    }
+  };
+
+  const handleKeyUp = (event: KeyboardEvent) => {
+    if (event.code in keyState) {
+      keyState[event.code as keyof typeof keyState] = false;
+      event.preventDefault();
+    }
+  };
+
+  // Add keyboard event listeners
+  window.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("keyup", handleKeyUp);
 
   function animate(currentTime: number = 0) {
     animationId = requestAnimationFrame(animate);
@@ -626,6 +669,78 @@ export function renderSingleStrandDNA(
 
     // Get current time for wave animation (calculate once)
     const time = currentTime * TIME_SCALE;
+
+    // Add slow spinning rotation to the entire DNA strand (shawarma effect) - only if spinning is enabled
+    if (isSpinning) {
+      dnaStrand.rotation.y += 0.1; // Adjust speed as needed (0.01 = slow, 0.02 = faster)
+    }
+
+    // Handle keyboard navigation
+    const panSpeed = 2;
+    const zoomSpeed = 2;
+    const rotateSpeed = 1;
+
+    if (keyState.Shift) {
+      // Shift modifier: zoom and rotate
+      if (keyState.ArrowUp) {
+        // Zoom in
+        camera.position.multiplyScalar(1 - zoomSpeed * 0.01);
+      }
+      if (keyState.ArrowDown) {
+        // Zoom out
+        camera.position.multiplyScalar(1 + zoomSpeed * 0.01);
+      }
+      if (keyState.ArrowLeft) {
+        // Rotate left around target
+        const spherical = new THREE.Spherical();
+        spherical.setFromVector3(camera.position.clone().sub(controls.target));
+        spherical.theta += rotateSpeed;
+        camera.position.copy(
+          new THREE.Vector3().setFromSpherical(spherical).add(controls.target)
+        );
+        camera.lookAt(controls.target);
+      }
+      if (keyState.ArrowRight) {
+        // Rotate right around target
+        const spherical = new THREE.Spherical();
+        spherical.setFromVector3(camera.position.clone().sub(controls.target));
+        spherical.theta -= rotateSpeed;
+        camera.position.copy(
+          new THREE.Vector3().setFromSpherical(spherical).add(controls.target)
+        );
+        camera.lookAt(controls.target);
+      }
+    } else {
+      // Normal mode: pan
+      const cameraRight = new THREE.Vector3();
+      const cameraUp = new THREE.Vector3();
+
+      // Get camera's right and up vectors for proper panning
+      camera.getWorldDirection(new THREE.Vector3()); // Update camera matrix
+      cameraRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+      cameraUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+
+      if (keyState.ArrowUp) {
+        // Pan up
+        camera.position.add(cameraUp.clone().multiplyScalar(panSpeed));
+        controls.target.add(cameraUp.clone().multiplyScalar(panSpeed));
+      }
+      if (keyState.ArrowDown) {
+        // Pan down
+        camera.position.add(cameraUp.clone().multiplyScalar(-panSpeed));
+        controls.target.add(cameraUp.clone().multiplyScalar(-panSpeed));
+      }
+      if (keyState.ArrowLeft) {
+        // Pan left
+        camera.position.add(cameraRight.clone().multiplyScalar(-panSpeed));
+        controls.target.add(cameraRight.clone().multiplyScalar(-panSpeed));
+      }
+      if (keyState.ArrowRight) {
+        // Pan right
+        camera.position.add(cameraRight.clone().multiplyScalar(panSpeed));
+        controls.target.add(cameraRight.clone().multiplyScalar(panSpeed));
+      }
+    }
 
     // Apply synchronized wave rotation and position to each nucleotide
     for (let i = 0; i < nucleotideData.length; i++) {
@@ -688,6 +803,9 @@ export function renderSingleStrandDNA(
     // Remove event listeners
     window.removeEventListener("resize", handleResize);
     document.removeEventListener("visibilitychange", handleVisibilityChange);
+    renderer.domElement.removeEventListener("dblclick", handleDoubleClick);
+    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("keyup", handleKeyUp);
 
     // Dispose of controls
     controls.dispose();

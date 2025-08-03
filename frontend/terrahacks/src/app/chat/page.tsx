@@ -365,7 +365,7 @@ export default function Home() {
           </div>
 
           {/* Controls */}
-          <div className="flex-1 p-4 space-y-6 overflow-y-auto">
+          <div className="flex-1 p-4 space-y-12 overflow-y-auto">
             {/* Generate Section */}
             <div
               className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainer}`}
@@ -485,14 +485,14 @@ export default function Home() {
 
         {/* Main 3D Visualization Area */}
         <div className="flex-1 relative">
-          <div className="absolute inset-0 p-4">
+          <div className="absolute inset-0">
             <div
-              className={`h-full w-full backdrop-blur-xl bg-white/2 rounded-lg border border-white/20 relative overflow-hidden shadow-2xl ${styles.glassContainer}`}
+              className={`h-full w-full backdrop-blur-xl bg-white/2 border border-white/20 relative overflow-hidden shadow-2xl ${styles.glassContainer}`}
             >
               <div id="dna-container" className="w-full h-full"></div>
 
               {/* Info and Legend Overlay - Top Right */}
-              <div className="absolute top-4 right-4 space-y-4 max-w-xs">
+              <div className="absolute top-4 right-4 space-y-10 max-w-xs">
                 {/* Info Section */}
                 <div
                   className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}

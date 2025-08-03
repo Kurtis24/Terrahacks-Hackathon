@@ -578,7 +578,7 @@ def create_pink_branch(collision_x, collision_y, mask, occupied_points=None):
     return branch_path
 
 class Snake:
-    def __init__(self, start_x, start_y, initial_direction, snake_id, scaffold_array=None, mask=None):
+    def __init__(self, start_x, start_y, initial_direction, snake_id, scaffold_array=None, mask=None, array_shape=(300, 300)):
         self.path = [(start_x, start_y)]
         self.current_x = start_x
         self.current_y = start_y
@@ -594,18 +594,33 @@ class Snake:
         self.mask = mask  # Reference to the shape mask for branch creation
         self.pink_branches = []  # Store pink branch lines created by this snake
         
+        # Calculate scaling factors for scaffold array
+        if self.scaffold_array is not None and mask is not None:
+            self.scale_x = array_shape[1] / mask.shape[1]  # width scaling
+            self.scale_y = array_shape[0] / mask.shape[0]  # height scaling
+        else:
+            self.scale_x = self.scale_y = 1
+        
         # Mark starting position in scaffold array
         if self.scaffold_array is not None:
-            if (0 <= start_y < self.scaffold_array.shape[0] and 
-                0 <= start_x < self.scaffold_array.shape[1]):
-                self.scaffold_array[start_y, start_x] = 1
+            scaled_start_x = int(start_x * self.scale_x)
+            scaled_start_y = int(start_y * self.scale_y)
+            if (0 <= scaled_start_y < self.scaffold_array.shape[0] and 
+                0 <= scaled_start_x < self.scaffold_array.shape[1]):
+                self.scaffold_array[scaled_start_y, scaled_start_x] = 1
     
     def update_scaffold_array(self, x, y):
         """Update the scaffold array by drawing a line from previous position to current position"""
         if self.scaffold_array is not None:
-            # Draw line from previous position to current position
-            draw_line_in_array(self.scaffold_array, self.prev_x, self.prev_y, x, y, value=1)
-            # Update previous position
+            # Scale coordinates to match scaffold array dimensions
+            scaled_prev_x = int(self.prev_x * self.scale_x)
+            scaled_prev_y = int(self.prev_y * self.scale_y)
+            scaled_x = int(x * self.scale_x)
+            scaled_y = int(y * self.scale_y)
+            
+            # Draw line from previous position to current position using scaled coordinates
+            draw_line_in_array(self.scaffold_array, scaled_prev_x, scaled_prev_y, scaled_x, scaled_y, value=1)
+            # Update previous position (keep in original mask coordinate space)
             self.prev_x = x
             self.prev_y = y
         
@@ -773,8 +788,8 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True):
     scaffold_array = np.zeros(array_shape, dtype=np.uint8) if return_array else None
     
     # Create two snakes with initial horizontal directions, passing the scaffold array and mask
-    left_snake = Snake(start_x, start_y, -1, "left", scaffold_array if return_array else None, mask)
-    right_snake = Snake(start_x, start_y, 1, "right", scaffold_array if return_array else None, mask)
+    left_snake = Snake(start_x, start_y, -1, "left", scaffold_array if return_array else None, mask, array_shape)
+    right_snake = Snake(start_x, start_y, 1, "right", scaffold_array if return_array else None, mask, array_shape)
     
     occupied_points = set()
     occupied_points.add((start_x, start_y))
@@ -872,15 +887,39 @@ def generate_random_connectors(mask, array_shape=(300, 300), scaffold_array=None
 
     connectors = []
     connector_length = 4   # Length of the horizontal arms
-    vertical_length = 4    # Half-height of the vertical arm
+    vertical_length = 2    # Half-height of the vertical arm
     
     print("🔗 Generating C-shaped connectors throughout shape...")
+    print(f"   📏 Mask dimensions: {mask.shape}")
+    print(f"   📏 Scaffold array dimensions: {scaffold_array.shape if scaffold_array is not None else 'None'}")
+    print(f"   📏 Array shape parameter: {array_shape}")
+    print(f"   📍 Shape bounds - Top: {top}, Bottom: {bottom}, Left: {left}, Right: {right}")
+
+    # Calculate scaling factors between mask and scaffold_array
+    if scaffold_array is not None:
+        scale_x = array_shape[1] / mask.shape[1]  # width scaling
+        scale_y = array_shape[0] / mask.shape[0]  # height scaling
+        print(f"   📏 Scaling factors: x={scale_x:.3f}, y={scale_y:.3f}")
+        
+        # Debug: Check scaffold array content
+        total_pixels = scaffold_array.shape[0] * scaffold_array.shape[1]
+        filled_pixels = np.sum(scaffold_array == 1)
+        print(f"   🔍 Scaffold array stats: {filled_pixels}/{total_pixels} pixels filled ({filled_pixels/total_pixels*100:.1f}%)")
+        
+        if filled_pixels > 0:
+            filled_coords = np.where(scaffold_array == 1)
+            print(f"   🔍 Sample filled coordinates: {list(zip(filled_coords[1][:5], filled_coords[0][:5]))}")  # x,y format
+        else:
+            print(f"   ⚠️  Scaffold array is EMPTY! No lines to place connectors on.")
+    else:
+        scale_x = scale_y = 1
 
     attempts = 0
     max_attempts = 200
-    target_connectors = 30
+    target_connectors = 100
 
     while len(connectors) < target_connectors and attempts < max_attempts:
+        connector_length = random.randint(4,9)
         attempts += 1
 
         # Generate random position within shape bounds
@@ -890,6 +929,52 @@ def generate_random_connectors(mask, array_shape=(300, 300), scaffold_array=None
         # Ensure the center position is valid
         if not is_point_in_shape(mask, center_x, center_y):
             continue
+
+        # Check if connector is positioned between lines (above and below), but not on a line
+        if scaffold_array is not None:
+            # Convert mask coordinates to scaffold array coordinates
+            scaled_center_x = int(center_x * scale_x)
+            scaled_center_y = int(center_y * scale_y)
+
+            # Debug output for first few attempts
+            if attempts <= 3:
+                center_value = scaffold_array[scaled_center_y, scaled_center_x] if (0 <= scaled_center_y < scaffold_array.shape[0] and 0 <= scaled_center_x < scaffold_array.shape[1]) else "OUT_OF_BOUNDS"
+                print(f"   🔍 Attempt {attempts}: center ({center_x}, {center_y}) -> scaled ({scaled_center_x}, {scaled_center_y}) = {center_value}")
+
+            # Check bounds first
+            if not (0 <= scaled_center_y < scaffold_array.shape[0] and 0 <= scaled_center_x < scaffold_array.shape[1]):
+                if attempts <= 3:
+                    print(f"   ❌ Center out of bounds: scaled ({scaled_center_x}, {scaled_center_y}) vs array shape {scaffold_array.shape}")
+                continue
+
+            # Check that center is NOT on an existing line
+            if scaffold_array[scaled_center_y, scaled_center_x] == 1:
+                if attempts <= 3:
+                    print(f"   ❌ Center is on existing line: scaffold_array[{scaled_center_y}, {scaled_center_x}] = 1")
+                continue
+
+            # Check for lines ABOVE the connector (within 10 pixels up)
+            line_found_above = False
+            for check_y in range(max(0, scaled_center_y - 10), scaled_center_y):
+                if (0 <= check_y < scaffold_array.shape[0] and 
+                    0 <= scaled_center_x < scaffold_array.shape[1]):
+                    if scaffold_array[check_y, scaled_center_x] == 1:
+                        line_found_above = True
+                        break
+                        
+            # Check for lines BELOW the connector (within 10 pixels down)
+            line_found_below = False
+            for check_y in range(scaled_center_y + 1, min(scaled_center_y + 11, scaffold_array.shape[0])):
+                if (0 <= check_y < scaffold_array.shape[0] and 
+                    0 <= scaled_center_x < scaffold_array.shape[1]):
+                    if scaffold_array[check_y, scaled_center_x] == 1:
+                        line_found_below = True
+                        break
+                        
+            if not (line_found_above and line_found_below):
+                if attempts <= 3:
+                    print(f"   ❌ Missing lines: above={line_found_above}, below={line_found_below} at ({scaled_center_x}, {scaled_center_y})")
+                continue
 
         direction = random.choice(['left', 'right'])  # ⊏ or ⊐
         connector_points = []
@@ -981,10 +1066,40 @@ def generate_random_connectors(mask, array_shape=(300, 300), scaffold_array=None
                     break
 
         if valid_connector and len(connector_points) >= 8:
-            connectors.append(connector_points)
-            if len(connectors) <= 5:  # Only print first few for debugging
-                print(f"   🔗 Created connector #{len(connectors)} at ({center_x}, {center_y}) "
-                      f"facing {direction} with {len(connector_points)} points")
+            # Check that MOST connector points are not on existing scaffold lines (allow some minor overlap)
+            conflict_count = 0
+            max_allowed_conflicts = 2  # Allow up to 2 points to overlap
+            
+            if scaffold_array is not None:
+                for point_x, point_y in connector_points:
+                    # Convert connector point to scaffold coordinates
+                    scaled_point_x = int(point_x * scale_x)
+                    scaled_point_y = int(point_y * scale_y)
+                    
+                    # Check bounds and if point is on existing line
+                    if (0 <= scaled_point_x < scaffold_array.shape[1] and 
+                        0 <= scaled_point_y < scaffold_array.shape[0]):
+                        if scaffold_array[scaled_point_y, scaled_point_x] == 1:
+                            conflict_count += 1
+                            if attempts <= 3 and conflict_count <= 3:  # Debug first few conflicts
+                                print(f"   ⚠️  Connector point ({point_x}, {point_y}) -> ({scaled_point_x}, {scaled_point_y}) conflicts with existing line")
+                            if conflict_count > max_allowed_conflicts:
+                                break
+                    else:
+                        # Point is out of bounds - this is bad, reject
+                        conflict_count = max_allowed_conflicts + 1
+                        break
+            
+            if conflict_count <= max_allowed_conflicts:
+                connectors.append(connector_points)
+                if len(connectors) <= 5:  # Only print first few for debugging
+                    scaled_debug_x = int(center_x * scale_x) if scaffold_array is not None else center_x
+                    scaled_debug_y = int(center_y * scale_y) if scaffold_array is not None else center_y
+                    print(f"   ✅ Created connector #{len(connectors)} at mask coords ({center_x}, {center_y}) -> scaffold coords ({scaled_debug_x}, {scaled_debug_y}) "
+                          f"facing {direction} with {len(connector_points)} points, {conflict_count} conflicts")
+            else:
+                if attempts <= 3:  # Debug first few attempts
+                    print(f"   ❌ Skipping connector at ({center_x}, {center_y}) - too many conflicts: {conflict_count}/{len(connector_points)} points")
 
     print(f"🔗 Generated {len(connectors)} C-shaped connectors total.")
     return connectors

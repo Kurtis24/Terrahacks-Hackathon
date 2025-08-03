@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { renderSingleStrandDNA } from "../utils/dna";
-import { ParsePath } from "../utils/parser";
+import { renderSingleStrandDNA } from "../../utils/dna";
+import { ParsePath } from "../../utils/parser";
 
 interface GenerateResult {
   status: "success" | "error";

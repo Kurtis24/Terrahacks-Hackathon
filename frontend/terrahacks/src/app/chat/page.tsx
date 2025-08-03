@@ -368,7 +368,7 @@ export default function Home() {
           <div className="flex-1 p-4 space-y-12 overflow-y-auto">
             {/* Generate Section */}
             <div
-              className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainer}`}
+              className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainerCard}`}
             >
               <h2
                 className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}
@@ -385,7 +385,7 @@ export default function Home() {
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="e.g., triangle, tower, bottle..."
-                    className="w-full px-3 py-2 backdrop-blur-md bg-slate-800/60 border border-slate-600/30 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 shadow-inner"
+                    className="w-full px-3 py-2 backdrop-blur-md bg-slate-800/60 border border-slate-600/30 rounded-full text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 shadow-inner"
                     disabled={isGenerating}
                     onKeyPress={(e) => {
                       if (e.key === "Enter" && !isGenerating) {
@@ -398,7 +398,7 @@ export default function Home() {
                 <button
                   onClick={generatePattern}
                   disabled={isGenerating || !prompt.trim()}
-                  className="w-full px-4 py-2 backdrop-blur-md bg-slate-700/50 text-white rounded-md hover:bg-slate-600/50 transition-all duration-300 disabled:bg-white/10 disabled:cursor-not-allowed border border-slate-500/30 shadow-lg hover:shadow-xl hover:scale-[1.02]"
+                  className="w-full px-4 py-2 backdrop-blur-md bg-slate-700/50 text-white rounded-full hover:bg-slate-600/50 transition-all duration-300 disabled:bg-white/10 disabled:cursor-not-allowed border border-slate-500/30 shadow-lg hover:shadow-xl hover:scale-[1.02]"
                 >
                   {isGenerating ? "Generating..." : "Generate Pattern"}
                 </button>
@@ -420,7 +420,7 @@ export default function Home() {
 
             {/* Controls Section */}
             <div
-              className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainer}`}
+              className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainerCard}`}
             >
               <h2
                 className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}
@@ -431,7 +431,7 @@ export default function Home() {
                 <button
                   onClick={loadPathData}
                   disabled={isLoading}
-                  className="w-full px-4 py-2 backdrop-blur-md bg-slate-700/50 text-white rounded-md hover:bg-slate-600/50 transition-all duration-300 disabled:bg-white/10 disabled:cursor-not-allowed border border-slate-500/30 shadow-lg hover:shadow-xl hover:scale-[1.02]"
+                  className="w-full px-4 py-2 backdrop-blur-md bg-slate-700/50 text-white rounded-full hover:bg-slate-600/50 transition-all duration-300 disabled:bg-white/10 disabled:cursor-not-allowed border border-slate-500/30 shadow-lg hover:shadow-xl hover:scale-[1.02]"
                 >
                   {isLoading ? "Loading..." : "Refresh Data"}
                 </button>
@@ -439,7 +439,7 @@ export default function Home() {
                 <button
                   onClick={renderDNA}
                   disabled={dnaArray.length === 0}
-                  className="w-full px-4 py-2 backdrop-blur-md bg-slate-700/50 text-white rounded-md hover:bg-slate-600/50 transition-all duration-300 disabled:bg-white/10 disabled:cursor-not-allowed border border-slate-500/30 shadow-lg hover:shadow-xl hover:scale-[1.02]"
+                  className="w-full px-4 py-2 backdrop-blur-md bg-slate-700/50 text-white rounded-full hover:bg-slate-600/50 transition-all duration-300 disabled:bg-white/10 disabled:cursor-not-allowed border border-slate-500/30 shadow-lg hover:shadow-xl hover:scale-[1.02]"
                 >
                   Re-render DNA
                 </button>
@@ -448,7 +448,7 @@ export default function Home() {
 
             {/* Controls Help */}
             <div
-              className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainer}`}
+              className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainerCard}`}
             >
               <h2
                 className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}
@@ -487,7 +487,7 @@ export default function Home() {
         <div className="flex-1 relative">
           <div className="absolute inset-0">
             <div
-              className={`h-full w-full backdrop-blur-xl bg-white/2 border border-white/20 relative overflow-hidden shadow-2xl ${styles.glassContainer}`}
+              className={`h-full w-full backdrop-blur-xl bg-white/2 border border-white/20 relative overflow-hidden shadow-2xl`}
             >
               <div id="dna-container" className="w-full h-full"></div>
 
@@ -495,7 +495,7 @@ export default function Home() {
               <div className="absolute top-4 right-4 space-y-10 max-w-xs">
                 {/* Info Section */}
                 <div
-                  className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}
+                  className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainerCard}`}
                 >
                   <div className="flex items-center justify-between mb-3">
                     <h2
@@ -505,7 +505,7 @@ export default function Home() {
                     </h2>
                     <button
                       onClick={() => setIsInfoCollapsed(!isInfoCollapsed)}
-                      className="text-white/70 hover:text-white transition-colors p-1 rounded hover:bg-white/10"
+                      className="text-white/70 hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
                       aria-label={
                         isInfoCollapsed ? "Expand info" : "Collapse info"
                       }
@@ -549,7 +549,7 @@ export default function Home() {
 
                 {/* Legend */}
                 <div
-                  className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}
+                  className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainerCard}`}
                 >
                   <div className="flex items-center justify-between mb-3">
                     <h2
@@ -559,7 +559,7 @@ export default function Home() {
                     </h2>
                     <button
                       onClick={() => setIsLegendCollapsed(!isLegendCollapsed)}
-                      className="text-white/70 hover:text-white transition-colors p-1 rounded hover:bg-white/10"
+                      className="text-white/70 hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
                       aria-label={
                         isLegendCollapsed ? "Expand legend" : "Collapse legend"
                       }
@@ -628,7 +628,7 @@ export default function Home() {
 
                 {/* Nucleotide Statistics */}
                 <div
-                  className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}
+                  className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainerCard}`}
                 >
                   <h2
                     className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}
@@ -707,7 +707,7 @@ export default function Home() {
                 {/* Hover Information */}
                 {hoverInfo && (
                   <div
-                    className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}
+                    className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainerCard}`}
                   >
                     <h2
                       className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}
@@ -758,7 +758,7 @@ export default function Home() {
               {(isLoading || isGenerating) && (
                 <div className="absolute inset-0 backdrop-blur-sm bg-black/20 flex items-center justify-center">
                   <div
-                    className={`backdrop-blur-md bg-white/5 p-4 rounded-lg border border-white/20 shadow-2xl ${styles.glassContainer}`}
+                    className={`backdrop-blur-md bg-white/5 p-4 rounded-lg border border-white/20 shadow-2xl ${styles.glassContainerCard}`}
                   >
                     <div className="text-white text-center">
                       <div className="animate-spin w-8 h-8 border-2 border-blue-500/50 border-t-blue-500 rounded-full mx-auto mb-2"></div>
@@ -774,7 +774,7 @@ export default function Home() {
               {!isLoading && !isGenerating && dnaArray.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div
-                    className={`text-center text-white/80 backdrop-blur-md bg-white/2 p-8 rounded-xl border border-white/20 shadow-2xl ${styles.glassContainer}`}
+                    className={`text-center text-white/80 backdrop-blur-md bg-white/2 p-8 rounded-xl border border-white/20 shadow-2xl ${styles.glassContainerCard}`}
                   >
                     <div className="text-6xl mb-4 drop-shadow-lg">🧬</div>
                     <div

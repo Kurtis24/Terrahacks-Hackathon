@@ -28,14 +28,8 @@ export default function Home() {
     null
   );
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [isInfoCollapsed, setIsInfoCollapsed] = useState(false);
-  const [isLegendCollapsed, setIsLegendCollapsed] = useState(false);
-  const [particles, setParticles] = useState<Array<{
-    id: number;
-    type: 'large' | 'small' | 'glow';
-    style: React.CSSProperties;
-  }>>([]);
-  const [isClient, setIsClient] = useState(false);
+  const [isInfoCollapsed, setIsInfoCollapsed] = useState(true);
+  const [isLegendCollapsed, setIsLegendCollapsed] = useState(true);
   const [hoverInfo, setHoverInfo] = useState<{
     nucleotideType: number;
     baseType: number;

@@ -319,12 +319,7 @@ export function renderSingleStrandDNA(
     }> = [];
     const usedInPairs = new Set<number>();
 
-    // Helper function to check if two base types are complementary
-    const areComplementary = (baseType1: number, baseType2: number) => {
-      return true; // Guanine pairs with Cytosine
-    };
-
-    // Look for complementary base pairs between single and double-digit nucleotides
+    // Look for base pairs between single and double-digit nucleotides
     for (let i = 0; i < nucleotides.length; i++) {
       if (usedInPairs.has(i)) continue;
 
@@ -335,17 +330,17 @@ export function renderSingleStrandDNA(
 
         const nuc2 = nucleotides[j];
 
-        // Check if nucleotides are in adjacent rows with same column
-        const adjacentRows =
+        // Check if nucleotides are adjacent (vertically or horizontally)
+        const adjacentVertically =
           Math.abs(nuc1.row - nuc2.row) === 1 && nuc1.col === nuc2.col;
+        const adjacentHorizontally =
+          Math.abs(nuc1.col - nuc2.col) === 1 && nuc1.row === nuc2.row;
 
         // Check if one is single-digit and other is double-digit
         const oneIsSingle = nuc1.isDoubleDNA !== nuc2.isDoubleDNA;
 
-        // Check if they are complementary bases
-        const complementary = areComplementary(nuc1.baseType, nuc2.baseType);
-
-        if (adjacentRows && oneIsSingle && complementary) {
+        // Always pair collision branches with main snake bases if they're adjacent
+        if ((adjacentVertically || adjacentHorizontally) && oneIsSingle) {
           pairs.push({ nuc1, nuc2 });
           usedInPairs.add(i);
           usedInPairs.add(j);
@@ -709,14 +704,10 @@ export function renderSingleStrandDNA(
   const handleMouseMove = (event: MouseEvent) => {
     if (!container) return;
 
-    console.log("Mouse move event detected");
-
     // Calculate mouse position in normalized device coordinates (-1 to +1)
     const rect = container.getBoundingClientRect();
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    console.log("Mouse position:", mouse.x, mouse.y);
 
     // Update the raycaster with the camera and mouse position
     raycaster.setFromCamera(mouse, camera);
@@ -724,18 +715,14 @@ export function renderSingleStrandDNA(
     // Calculate objects intersecting the ray
     const intersects = raycaster.intersectObjects(scene.children, true);
 
-    console.log("Mouse move detected, intersects:", intersects.length);
-
     let newHoveredObject: THREE.Object3D | null = null;
 
     // Find the first intersected object that has hover data
     for (const intersect of intersects) {
       let obj = intersect.object;
-      console.log("Checking object:", obj.type, obj.userData);
       // Check the object and its parent for userData
       while (obj) {
         if (obj.userData && obj.userData.nucleotideType) {
-          console.log("Found nucleotide object:", obj.userData);
           newHoveredObject = obj;
           break;
         }
@@ -746,18 +733,11 @@ export function renderSingleStrandDNA(
 
     // If hover changed, update the callback
     if (newHoveredObject !== currentHoveredObject) {
-      console.log(
-        "Hover changed:",
-        currentHoveredObject,
-        "->",
-        newHoveredObject
-      );
       currentHoveredObject = newHoveredObject;
 
       if (onHover) {
         if (currentHoveredObject && currentHoveredObject.userData) {
           const userData = currentHoveredObject.userData;
-          console.log("Calling onHover with:", userData);
           // Type check the userData to ensure it has the expected structure
           if (
             typeof userData.nucleotideType === "number" &&
@@ -779,21 +759,16 @@ export function renderSingleStrandDNA(
               }
             );
           } else {
-            console.log("userData type check failed");
             onHover(null);
           }
         } else {
-          console.log("No userData, calling onHover(null)");
           onHover(null);
         }
-      } else {
-        console.log("onHover callback not provided");
       }
     }
   };
 
   const handleMouseLeave = () => {
-    console.log("Mouse leave detected");
     if (currentHoveredObject) {
       currentHoveredObject = null;
       if (onHover) {
@@ -807,8 +782,6 @@ export function renderSingleStrandDNA(
   canvas.addEventListener("mousemove", handleMouseMove, false);
   canvas.addEventListener("mouseleave", handleMouseLeave, false);
   canvas.addEventListener("dblclick", handleDoubleClick);
-
-  console.log("Event listeners added to canvas:", canvas);
 
   // Keyboard navigation
   const keyState = {

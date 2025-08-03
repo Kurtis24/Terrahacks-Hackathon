@@ -19,6 +19,13 @@ interface PathData {
       total_pixels: number;
       coordinates: [number, number][];
     };
+    cyan_lines?: {
+      color: string;
+      snake_type: string;
+      description: string;
+      total_pixels: number;
+      coordinates: [number, number][];
+    };
   };
   summary: {
     grid_dimensions: string;
@@ -26,6 +33,7 @@ interface PathData {
     total_red_pixels: number;
     total_snake_pixels: number;
     total_pink_pixels: number;
+    total_cyan_pixels?: number;
     total_line_pixels: number;
   };
 }
@@ -51,11 +59,17 @@ export async function ParsePath(): Promise<number[][]> {
     // Helper function to generate random number from 11 to 14 (for pink lines)
     const getRandomPinkValue = (): number => Math.floor(Math.random() * 4) + 11;
 
+    // Helper function to generate random number from 11 to 14 (for cyan lines - now same as pink)
+    const getRandomCyanValue = (): number => Math.floor(Math.random() * 4) + 11;
+
     // Get snake coordinates (combined green and red lines)
     const snakeCoords = pathData.line_coordinates.snake_lines.coordinates;
 
     // Get pink branch coordinates
     const pinkCoords = pathData.line_coordinates.pink_lines.coordinates;
+
+    // Get cyan connector coordinates (if they exist)
+    const cyanCoords = pathData.line_coordinates.cyan_lines?.coordinates || [];
 
     // Process snake coordinates with single digit values (1-4)
     for (const [x, y] of snakeCoords) {
@@ -68,6 +82,13 @@ export async function ParsePath(): Promise<number[][]> {
     for (const [x, y] of pinkCoords) {
       if (x >= 0 && x < 300 && y >= 0 && y < 300) {
         grid[y][x] = getRandomPinkValue();
+      }
+    }
+
+    // Process cyan coordinates with values (11-14) for collision branches
+    for (const [x, y] of cyanCoords) {
+      if (x >= 0 && x < 300 && y >= 0 && y < 300) {
+        grid[y][x] = getRandomCyanValue();
       }
     }
 

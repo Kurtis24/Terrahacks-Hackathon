@@ -799,7 +799,7 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True):
     print(f"🌸 Total pink branches created: {len(all_pink_branches)}")
     
     # Generate random C-shaped connectors
-    connector_branches = generate_random_connectors(mask, array_shape)
+    connector_branches = generate_random_connectors(mask, array_shape, scaffold_array)
     print(f"🔗 Total connector branches created: {len(connector_branches)}")
     
     if return_array:
@@ -851,19 +851,16 @@ def add_crossovers_to_path(path):
 
 import random
 
-def generate_random_connectors(mask, array_shape=(300, 300)):
-    """Generate random C-shaped connectors for the given shape mask.
+def generate_random_connectors(mask, array_shape=(300, 300), scaffold_array=None):
+    """Generate C-shaped connectors positioned throughout the shape.
 
     Creates connectors in the pattern:
     ----
     |
     ----
-    Randomly facing left (⊏) or right (⊐).
+    
+    Randomly facing left (⊏) or right (⊐) with proper 90-degree connections.
     """
-
-    # Assume these helper functions exist:
-    # find_topmost_point(mask), find_bottommost_point(mask), find_leftmost_point(mask), find_rightmost_point(mask)
-    # is_point_in_shape(mask, x, y)
 
     top = find_topmost_point(mask)
     bottom = find_bottommost_point(mask)
@@ -874,22 +871,23 @@ def generate_random_connectors(mask, array_shape=(300, 300)):
         return []
 
     connectors = []
-    connector_length = 2   # Half-width of the horizontal arms
-    vertical_length = 2    # Height of the vertical arm
-    step_size = 1          # Pixel resolution
-
-    print("🔗 Generating C-shaped connectors (random direction)...")
+    connector_length = 4   # Length of the horizontal arms
+    vertical_length = 4    # Half-height of the vertical arm
+    
+    print("🔗 Generating C-shaped connectors throughout shape...")
 
     attempts = 0
-    max_attempts = 50
-    target_connectors = 8
+    max_attempts = 200
+    target_connectors = 30
 
     while len(connectors) < target_connectors and attempts < max_attempts:
         attempts += 1
 
-        center_x = random.randint(left[0] + 30, right[0] - 30)
-        center_y = random.randint(top[1] + 30, bottom[1] - 30)
+        # Generate random position within shape bounds
+        center_x = random.randint(left[0] + connector_length + 5, right[0] - connector_length - 5)
+        center_y = random.randint(top[1] + vertical_length + 5, bottom[1] - vertical_length - 5)
 
+        # Ensure the center position is valid
         if not is_point_in_shape(mask, center_x, center_y):
             continue
 
@@ -897,54 +895,96 @@ def generate_random_connectors(mask, array_shape=(300, 300)):
         connector_points = []
         valid_connector = True
 
-        # Set vertical line base X position
-        if direction == 'left':
-            x_base = center_x - connector_length * step_size
-        else:
-            x_base = center_x + connector_length * step_size
-
-        # Vertical arm
-        for dy in range(-vertical_length, vertical_length + 1):
-            x = x_base
-            y = center_y + dy * step_size
-            if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
-                connector_points.append((x, y))
-            else:
-                valid_connector = False
-                break
-
-        if not valid_connector:
-            continue
-
-        # Top horizontal arm
-        y_top = center_y - vertical_length * step_size
-        for dx in range(0, connector_length * 2 + 1):
-            x = x_base + dx * step_size if direction == 'left' else x_base - dx * step_size
-            y = y_top
-            if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
-                connector_points.append((x, y))
-            else:
-                valid_connector = False
-                break
-
-        if not valid_connector:
-            continue
-
-        # Bottom horizontal arm
-        y_bottom = center_y + vertical_length * step_size
-        for dx in range(0, connector_length * 2 + 1):
-            x = x_base + dx * step_size if direction == 'left' else x_base - dx * step_size
-            y = y_bottom
-            if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
-                connector_points.append((x, y))
-            else:
-                valid_connector = False
-                break
+        # Create a proper C-shaped path with continuous 90-degree turns
+        if direction == 'left':  # ⊏ shape
+            # Start at top-right, go left, then down, then right
+            
+            # Top horizontal arm (right to left)
+            y_top = center_y - vertical_length
+            for dx in range(connector_length, -1, -1):  # Right to left
+                x = center_x + dx
+                y = y_top
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
+            
+            if not valid_connector:
+                continue
+            
+            # Vertical arm (top to bottom, excluding the top point we already added)
+            x_base = center_x
+            for dy in range(-vertical_length + 1, vertical_length + 1):  # Skip first point
+                x = x_base
+                y = center_y + dy
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
+            
+            if not valid_connector:
+                continue
+            
+            # Bottom horizontal arm (left to right, excluding the left point we already added)
+            y_bottom = center_y + vertical_length
+            for dx in range(1, connector_length + 1):  # Skip first point
+                x = center_x + dx
+                y = y_bottom
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
+                    
+        else:  # 'right' - ⊐ shape
+            # Start at top-left, go right, then down, then left
+            
+            # Top horizontal arm (left to right)
+            y_top = center_y - vertical_length
+            for dx in range(-connector_length, 1):  # Left to right
+                x = center_x + dx
+                y = y_top
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
+            
+            if not valid_connector:
+                continue
+            
+            # Vertical arm (top to bottom, excluding the top point we already added)
+            x_base = center_x
+            for dy in range(-vertical_length + 1, vertical_length + 1):  # Skip first point
+                x = x_base
+                y = center_y + dy
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
+            
+            if not valid_connector:
+                continue
+            
+            # Bottom horizontal arm (right to left, excluding the right point we already added)
+            y_bottom = center_y + vertical_length
+            for dx in range(-1, -connector_length - 1, -1):  # Skip first point, go right to left
+                x = center_x + dx
+                y = y_bottom
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
 
         if valid_connector and len(connector_points) >= 8:
             connectors.append(connector_points)
-            print(f"   🔗 Created C-connector #{len(connectors)} at ({center_x}, {center_y}) "
-                  f"facing {direction}")
+            if len(connectors) <= 5:  # Only print first few for debugging
+                print(f"   🔗 Created connector #{len(connectors)} at ({center_x}, {center_y}) "
+                      f"facing {direction} with {len(connector_points)} points")
 
     print(f"🔗 Generated {len(connectors)} C-shaped connectors total.")
     return connectors

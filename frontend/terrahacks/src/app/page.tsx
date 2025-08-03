@@ -26,6 +26,26 @@ export default function Home() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isInfoCollapsed, setIsInfoCollapsed] = useState(false);
   const [isLegendCollapsed, setIsLegendCollapsed] = useState(false);
+  const [hoverInfo, setHoverInfo] = useState<{
+    nucleotideType: number;
+    baseType: number;
+    isDoubleDNA: boolean;
+    position: { row: number; col: number };
+    category: "main_snake" | "collision_branch";
+  } | null>(null);
+  const [nucleotideStats, setNucleotideStats] = useState<{
+    mainSnake: { A: number; T: number; C: number; G: number; total: number };
+    collisionBranches: {
+      A: number;
+      T: number;
+      C: number;
+      G: number;
+      total: number;
+    };
+  }>({
+    mainSnake: { A: 0, T: 0, C: 0, G: 0, total: 0 },
+    collisionBranches: { A: 0, T: 0, C: 0, G: 0, total: 0 },
+  });
 
   const FAST_API_URL = "http://localhost:8000";
 
@@ -98,7 +118,12 @@ export default function Home() {
   const renderDNA = useCallback(() => {
     if (dnaArray.length > 0) {
       try {
-        renderSingleStrandDNA(dnaArray, "dna-container");
+        const result = renderSingleStrandDNA(
+          dnaArray,
+          "dna-container",
+          setHoverInfo
+        );
+        setNucleotideStats(result.stats);
       } catch (error) {
         console.error("Error rendering DNA:", error);
         setError("Failed to render DNA visualization");
@@ -381,6 +406,125 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+
+              {/* Nucleotide Statistics */}
+              <div className="backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300">
+                <h2 className="text-lg font-semibold text-white mb-3 drop-shadow-md">
+                  Statistics
+                </h2>
+                <div className="space-y-3 text-sm">
+                  <div className="text-white/70 font-medium mb-2">
+                    Main Snake Path:
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-red-500/20 p-2 rounded border border-red-400/30">
+                      <span className="text-red-200">A:</span>
+                      <span className="text-white font-medium">
+                        {nucleotideStats.mainSnake.A}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-blue-500/20 p-2 rounded border border-blue-400/30">
+                      <span className="text-blue-200">T:</span>
+                      <span className="text-white font-medium">
+                        {nucleotideStats.mainSnake.T}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-green-500/20 p-2 rounded border border-green-400/30">
+                      <span className="text-green-200">C:</span>
+                      <span className="text-white font-medium">
+                        {nucleotideStats.mainSnake.C}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-yellow-500/20 p-2 rounded border border-yellow-400/30">
+                      <span className="text-yellow-200">G:</span>
+                      <span className="text-white font-medium">
+                        {nucleotideStats.mainSnake.G}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-white/60 text-xs text-center">
+                    Total: {nucleotideStats.mainSnake.total}
+                  </div>
+
+                  <div className="text-white/70 font-medium mb-2 mt-4">
+                    Collision Branches:
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-red-500/20 p-2 rounded border border-red-400/30">
+                      <span className="text-red-200">A:</span>
+                      <span className="text-white font-medium">
+                        {nucleotideStats.collisionBranches.A}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-blue-500/20 p-2 rounded border border-blue-400/30">
+                      <span className="text-blue-200">T:</span>
+                      <span className="text-white font-medium">
+                        {nucleotideStats.collisionBranches.T}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-green-500/20 p-2 rounded border border-green-400/30">
+                      <span className="text-green-200">C:</span>
+                      <span className="text-white font-medium">
+                        {nucleotideStats.collisionBranches.C}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-yellow-500/20 p-2 rounded border border-yellow-400/30">
+                      <span className="text-yellow-200">G:</span>
+                      <span className="text-white font-medium">
+                        {nucleotideStats.collisionBranches.G}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-white/60 text-xs text-center">
+                    Total: {nucleotideStats.collisionBranches.total}
+                  </div>
+                </div>
+              </div>
+
+              {/* Hover Information */}
+              {hoverInfo && (
+                <div className="backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300">
+                  <h2 className="text-lg font-semibold text-white mb-3 drop-shadow-md">
+                    Hovered Nucleotide
+                  </h2>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
+                      <span className="text-white/70">Type:</span>
+                      <span className="text-white font-medium">
+                        {hoverInfo.baseType === 1
+                          ? "Adenine (A)"
+                          : hoverInfo.baseType === 2
+                          ? "Thymine (T)"
+                          : hoverInfo.baseType === 3
+                          ? "Cytosine (C)"
+                          : hoverInfo.baseType === 4
+                          ? "Guanine (G)"
+                          : "Unknown"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
+                      <span className="text-white/70">Category:</span>
+                      <span className="text-white font-medium">
+                        {hoverInfo.category === "main_snake"
+                          ? "Main Snake"
+                          : "Collision Branch"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
+                      <span className="text-white/70">Position:</span>
+                      <span className="text-white font-medium">
+                        ({hoverInfo.position.row}, {hoverInfo.position.col})
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
+                      <span className="text-white/70">Value:</span>
+                      <span className="text-white font-medium">
+                        {hoverInfo.nucleotideType}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Loading overlay */}

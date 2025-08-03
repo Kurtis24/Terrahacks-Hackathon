@@ -31,23 +31,23 @@ const IntroPage = () => {
     },
     {
       id: 'why',
-      title: 'Why we',
-      subtitle: 'built it',
-      description: 'Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry\'s standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it',
+      title: 'Inspiration',
+      subtitle: 'The world’s smallest Nerf gun',
+      description: 'This distinctive art form, awaiting its canvas, draws inspiration from Mark Rober’s  "world’s smallest Nerf gun." Pioneered in 2016, we strive to increase its visibility and make it accessible for the next wave of biotech AI innovations.',
       videoTime: 0.33
     },
     {
       id: 'how',
       title: 'How we',
       subtitle: 'built it',
-      description: 'Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry\'s standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it',
+      description: 'Leveraging an advanced algorithm streamlines the process by tracing AI-filtered images to pinpoint connection points and sequences, creating a dynamic and interactive 3D visualization structure..',
       videoTime: 0.66
     },
     {
       id: 'tech',
-      title: 'Emerging',
-      subtitle: 'tech',
-      description: 'Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry\'s standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it',
+      title: 'The future',
+      subtitle: 'of healthcare',
+      description: 'NanoWorks, an emerging technology inspired by the cursor\'s role in software development, is set to revolutionize 2D and 3D DNA origami design by offering an intuitive tool to overcome the steep learning curve of DNA manipulation and splicing, driving the next leap in nanotechnology with tangible nanoscale innovations.',
       videoTime: 1.0
     }
   ];

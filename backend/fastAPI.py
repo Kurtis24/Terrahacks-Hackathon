@@ -1,5 +1,6 @@
 import fastapi
 from fastapi import Request
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from main import generate_pollinations_image, process_existing_image
 from pydantic import BaseModel
@@ -8,6 +9,15 @@ class GenerateRequest(BaseModel):
     prompt: str
 
 app = fastapi.FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 @app.post("/generate")
 def generate_pattern(request: GenerateRequest):

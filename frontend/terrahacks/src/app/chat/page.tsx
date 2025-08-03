@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { renderSingleStrandDNA } from "../../utils/dna";
 import { ParsePath } from "../../utils/parser";
 import styles from "./intropage.module.css";
+import { useRef } from "react";
 
 interface GenerateResult {
   status: "success" | "error";

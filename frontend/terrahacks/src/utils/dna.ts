@@ -3,11 +3,69 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 export function renderSingleStrandDNA(
   dnaArray: number[][],
-  containerId: string
-) {
+  containerId: string,
+  onHover?: (
+    hoverInfo: {
+      nucleotideType: number;
+      baseType: number;
+      isDoubleDNA: boolean;
+      position: { row: number; col: number };
+      category: "main_snake" | "collision_branch";
+    } | null
+  ) => void
+): {
+  cleanup: () => void;
+  stats: {
+    mainSnake: { A: number; T: number; C: number; G: number; total: number };
+    collisionBranches: {
+      A: number;
+      T: number;
+      C: number;
+      G: number;
+      total: number;
+    };
+  };
+} {
   // Clear existing content and dispose of previous Three.js objects
   const container = document.getElementById(containerId);
-  if (!container) return;
+  if (!container)
+    return {
+      cleanup: () => {},
+      stats: {
+        mainSnake: { A: 0, T: 0, C: 0, G: 0, total: 0 },
+        collisionBranches: { A: 0, T: 0, C: 0, G: 0, total: 0 },
+      },
+    };
+
+  // Initialize nucleotide statistics
+  const stats = {
+    mainSnake: { A: 0, T: 0, C: 0, G: 0, total: 0 },
+    collisionBranches: { A: 0, T: 0, C: 0, G: 0, total: 0 },
+  };
+
+  // Helper function to get nucleotide name
+  const getNucleotideName = (baseType: number): "A" | "T" | "C" | "G" => {
+    switch (baseType) {
+      case 1:
+        return "A"; // Adenine
+      case 2:
+        return "T"; // Thymine
+      case 3:
+        return "C"; // Cytosine
+      case 4:
+        return "G"; // Guanine
+      default:
+        return "A";
+    }
+  };
+
+  // Helper function to update stats
+  const updateStats = (baseType: number, isDoubleDNA: boolean) => {
+    const nucleotideName = getNucleotideName(baseType);
+    const category = isDoubleDNA ? stats.collisionBranches : stats.mainSnake;
+    category[nucleotideName]++;
+    category.total++;
+  };
 
   // Clean up any existing Three.js content
   while (container.firstChild) {
@@ -147,6 +205,24 @@ export function renderSingleStrandDNA(
         isDoubleDNA ? pinkSugarMaterial : sugarMaterial
       );
       nucleotideGroup.add(sugar);
+
+      // Update nucleotide statistics
+      updateStats(baseType, isDoubleDNA);
+
+      // Add hover functionality to the sugar backbone
+      const hoverInfo = {
+        nucleotideType,
+        baseType,
+        isDoubleDNA,
+        position: { row, col },
+        category: isDoubleDNA
+          ? ("collision_branch" as const)
+          : ("main_snake" as const),
+      };
+
+      // Add mouse event listeners for hover
+      sugar.userData = hoverInfo;
+      nucleotideGroup.userData = hoverInfo;
 
       // Generate wave-based rotation speeds for synchronized wave effect
       const rotationSpeed = {
@@ -624,7 +700,115 @@ export function renderSingleStrandDNA(
   const handleDoubleClick = () => {
     isSpinning = !isSpinning;
   };
-  renderer.domElement.addEventListener("dblclick", handleDoubleClick);
+
+  // Mouse hover detection using raycasting
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  let currentHoveredObject: THREE.Object3D | null = null;
+
+  const handleMouseMove = (event: MouseEvent) => {
+    if (!container) return;
+
+    console.log("Mouse move event detected");
+
+    // Calculate mouse position in normalized device coordinates (-1 to +1)
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    console.log("Mouse position:", mouse.x, mouse.y);
+
+    // Update the raycaster with the camera and mouse position
+    raycaster.setFromCamera(mouse, camera);
+
+    // Calculate objects intersecting the ray
+    const intersects = raycaster.intersectObjects(scene.children, true);
+
+    console.log("Mouse move detected, intersects:", intersects.length);
+
+    let newHoveredObject: THREE.Object3D | null = null;
+
+    // Find the first intersected object that has hover data
+    for (const intersect of intersects) {
+      let obj = intersect.object;
+      console.log("Checking object:", obj.type, obj.userData);
+      // Check the object and its parent for userData
+      while (obj) {
+        if (obj.userData && obj.userData.nucleotideType) {
+          console.log("Found nucleotide object:", obj.userData);
+          newHoveredObject = obj;
+          break;
+        }
+        obj = obj.parent as THREE.Object3D;
+      }
+      if (newHoveredObject) break;
+    }
+
+    // If hover changed, update the callback
+    if (newHoveredObject !== currentHoveredObject) {
+      console.log(
+        "Hover changed:",
+        currentHoveredObject,
+        "->",
+        newHoveredObject
+      );
+      currentHoveredObject = newHoveredObject;
+
+      if (onHover) {
+        if (currentHoveredObject && currentHoveredObject.userData) {
+          const userData = currentHoveredObject.userData;
+          console.log("Calling onHover with:", userData);
+          // Type check the userData to ensure it has the expected structure
+          if (
+            typeof userData.nucleotideType === "number" &&
+            typeof userData.baseType === "number" &&
+            typeof userData.isDoubleDNA === "boolean" &&
+            userData.position &&
+            typeof userData.position.row === "number" &&
+            typeof userData.position.col === "number" &&
+            (userData.category === "main_snake" ||
+              userData.category === "collision_branch")
+          ) {
+            onHover(
+              userData as {
+                nucleotideType: number;
+                baseType: number;
+                isDoubleDNA: boolean;
+                position: { row: number; col: number };
+                category: "main_snake" | "collision_branch";
+              }
+            );
+          } else {
+            console.log("userData type check failed");
+            onHover(null);
+          }
+        } else {
+          console.log("No userData, calling onHover(null)");
+          onHover(null);
+        }
+      } else {
+        console.log("onHover callback not provided");
+      }
+    }
+  };
+
+  const handleMouseLeave = () => {
+    console.log("Mouse leave detected");
+    if (currentHoveredObject) {
+      currentHoveredObject = null;
+      if (onHover) {
+        onHover(null);
+      }
+    }
+  };
+
+  // Add event listeners to the canvas element, not just the renderer.domElement
+  const canvas = renderer.domElement;
+  canvas.addEventListener("mousemove", handleMouseMove, false);
+  canvas.addEventListener("mouseleave", handleMouseLeave, false);
+  canvas.addEventListener("dblclick", handleDoubleClick);
+
+  console.log("Event listeners added to canvas:", canvas);
 
   // Keyboard navigation
   const keyState = {
@@ -803,9 +987,11 @@ export function renderSingleStrandDNA(
     // Remove event listeners
     window.removeEventListener("resize", handleResize);
     document.removeEventListener("visibilitychange", handleVisibilityChange);
-    renderer.domElement.removeEventListener("dblclick", handleDoubleClick);
+    canvas.removeEventListener("dblclick", handleDoubleClick);
     window.removeEventListener("keydown", handleKeyDown);
     window.removeEventListener("keyup", handleKeyUp);
+    canvas.removeEventListener("mousemove", handleMouseMove);
+    canvas.removeEventListener("mouseleave", handleMouseLeave);
 
     // Dispose of controls
     controls.dispose();
@@ -853,5 +1039,5 @@ export function renderSingleStrandDNA(
     }
   };
 
-  return cleanup;
+  return { cleanup, stats };
 }

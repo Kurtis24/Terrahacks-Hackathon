@@ -267,6 +267,22 @@ html {
   overflow: hidden;
 }
 
+.liquidGlassBackgroundTitle {
+  top: 0;
+  left: 0;
+
+  background: linear-gradient(
+    135deg,
+    #0f172a 0%,
+    #1e293b 25%,
+    #334155 50%,
+    #1e293b 75%,
+    #0f172a 100%
+  );
+  z-index: -1;
+  overflow: hidden;
+}
+
 .liquidGlassBlob {
   position: absolute;
   border-radius: 50%;

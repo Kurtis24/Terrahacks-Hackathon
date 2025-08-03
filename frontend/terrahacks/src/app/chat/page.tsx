@@ -355,9 +355,11 @@ export default function Home() {
         {/* Sidebar */}
         <div className="w-80 backdrop-blur-xl bg-white/5 border-r border-white/20 flex flex-col shadow-2xl">
           {/* Header */}
-          <div className="p-4 border-b border-white/20 backdrop-blur-sm bg-white/2">
+          <div
+            className={`p-4 border-b border-white/20 backdrop-blur-sm ${styles.liquidGlassBackgroundTitle}`}
+          >
             <h1
-              className={`text-xl font-bold text-white mb-1 drop-shadow-lg ${styles.textGlow}`}
+              className={`text-xl font-bold text-white mb-1 drop-shadow-lg${styles.holographicText}`}
             >
               NanoWorks
             </h1>

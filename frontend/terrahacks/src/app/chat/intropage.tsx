@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import styles from './intropage.module.css';
 
 const IntroPage = () => {
@@ -18,6 +19,8 @@ const IntroPage = () => {
   const [isClient, setIsClient] = useState(false);
   const [prevSection, setPrevSection] = useState(0);
   const [shouldRotate, setShouldRotate] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const router = useRouter();
 
   const sections = [
     {
@@ -248,6 +251,27 @@ const IntroPage = () => {
     generateParticles();
   }, [isClient]);
 
+  // Handle input submission
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputValue.trim()) {
+      // Navigate to chat page with the input value as a query parameter
+      router.push(`/chat?prompt=${encodeURIComponent(inputValue.trim())}`);
+    }
+  };
+
+  // Handle input change
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value);
+  };
+
+  // Handle Enter key press
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSubmit(e as any);
+    }
+  };
+
   return (
     <div ref={containerRef} className="relative">
       {/* Video Background for all sections */}
@@ -397,22 +421,29 @@ const IntroPage = () => {
                 {section.id === 'hero' && (
                   <div className="mt-12 space-y-8 w-full max-w-4xl">
                     {/* Chat Input Container */}
-                    <div className="relative">
+                    <form onSubmit={handleSubmit} className="relative">
                       <div className="bg-slate-800/60 backdrop-blur-xl border border-slate-600/30 rounded-2xl p-1 shadow-2xl">
                         <div className="flex items-center space-x-3 p-4">
                           <input
                             type="text"
+                            value={inputValue}
+                            onChange={handleInputChange}
+                            onKeyPress={handleKeyPress}
                             placeholder="Let your imagination run wild..."
                             className="flex-1 bg-transparent text-white placeholder-slate-400 text-lg focus:outline-none"
                           />
-                          <button className="p-3 bg-slate-700/50 hover:bg-slate-600/50 rounded-xl transition-all duration-300 border border-slate-500/30">
+                          <button 
+                            type="submit"
+                            disabled={!inputValue.trim()}
+                            className="p-3 bg-slate-700/50 hover:bg-slate-600/50 rounded-xl transition-all duration-300 border border-slate-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
                             <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                             </svg>
                           </button>
                         </div>
                       </div>
-                    </div>
+                    </form>
 
                     {/* Action Buttons */}
                     <div className="flex flex-wrap gap-3 justify-center">
@@ -440,22 +471,46 @@ const IntroPage = () => {
 
                     {/* Suggested Prompts */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
-                      <button className="text-left p-4 bg-slate-800/30 hover:bg-slate-700/40 backdrop-blur-sm border border-slate-600/20 rounded-xl transition-all duration-300 group">
+                      <button 
+                        onClick={() => {
+                          setInputValue("Create a trigonal planar molecule with 4 atoms");
+                          router.push(`/chat?prompt=${encodeURIComponent("Create a trigonal planar molecule with 4 atoms")}`);
+                        }}
+                        className="text-left p-4 bg-slate-800/30 hover:bg-slate-700/40 backdrop-blur-sm border border-slate-600/20 rounded-xl transition-all duration-300 group"
+                      >
                         <div className="text-slate-200 font-medium mb-1">Molecular Design</div>
                         <div className="text-slate-400 text-sm">Create a trigonal planar molecule with 4 atoms</div>
                       </button>
                       
-                      <button className="text-left p-4 bg-slate-800/30 hover:bg-slate-700/40 backdrop-blur-sm border border-slate-600/20 rounded-xl transition-all duration-300 group">
+                      <button 
+                        onClick={() => {
+                          setInputValue("A car with one wheel");
+                          router.push(`/chat?prompt=${encodeURIComponent("A car with one wheel")}`);
+                        }}
+                        className="text-left p-4 bg-slate-800/30 hover:bg-slate-700/40 backdrop-blur-sm border border-slate-600/20 rounded-xl transition-all duration-300 group"
+                      >
                         <div className="text-slate-200 font-medium mb-1">Just For Kicks</div>
                         <div className="text-slate-400 text-sm">A car with one wheel</div>
                       </button>
                       
-                      <button className="text-left p-4 bg-slate-800/30 hover:bg-slate-700/40 backdrop-blur-sm border border-slate-600/20 rounded-xl transition-all duration-300 group">
+                      <button 
+                        onClick={() => {
+                          setInputValue("Facilitate targeted bond formation in T4 lysozyme");
+                          router.push(`/chat?prompt=${encodeURIComponent("Facilitate targeted bond formation in T4 lysozyme")}`);
+                        }}
+                        className="text-left p-4 bg-slate-800/30 hover:bg-slate-700/40 backdrop-blur-sm border border-slate-600/20 rounded-xl transition-all duration-300 group"
+                      >
                         <div className="text-slate-200 font-medium mb-1">Structural Analysis</div>
                         <div className="text-slate-400 text-sm">Facilitate targeted bond formation in T4 lysozyme</div>
                       </button>
                       
-                      <button className="text-left p-4 bg-slate-800/30 hover:bg-slate-700/40 backdrop-blur-sm border border-slate-600/20 rounded-xl transition-all duration-300 group">
+                      <button 
+                        onClick={() => {
+                          setInputValue("Assist in modeling structure of the human genome");
+                          router.push(`/chat?prompt=${encodeURIComponent("Assist in modeling structure of the human genome")}`);
+                        }}
+                        className="text-left p-4 bg-slate-800/30 hover:bg-slate-700/40 backdrop-blur-sm border border-slate-600/20 rounded-xl transition-all duration-300 group"
+                      >
                         <div className="text-slate-200 font-medium mb-1">Research Tools</div>
                         <div className="text-slate-400 text-sm">Assist in modeling structure of the human genome</div>
                       </button>

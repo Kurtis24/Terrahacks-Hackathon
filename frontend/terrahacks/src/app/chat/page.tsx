@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { renderSingleStrandDNA } from "../../utils/dna";
 import { ParsePath } from "../../utils/parser";
-import styles from './intropage.module.css';
+import styles from "./intropage.module.css";
 
 interface GenerateResult {
   status: "success" | "error";
@@ -19,6 +19,9 @@ interface GenerateResult {
 export default function Home() {
   const searchParams = useSearchParams();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [isClient, setIsClient] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [particles, setParticles] = useState<any[]>([]);
   const [dnaArray, setDnaArray] = useState<number[][]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,28 +77,28 @@ export default function Home() {
     if (video && isClient) {
       const tryPlay = () => {
         if (video.paused) {
-          video.play().catch(e => {
-            console.log('Video autoplay failed:', e);
+          video.play().catch((e) => {
+            console.log("Video autoplay failed:", e);
           });
         }
       };
-      
+
       // Try to play after a short delay
       setTimeout(tryPlay, 1000);
-      
+
       // Also try on user interaction
       const handleUserInteraction = () => {
         tryPlay();
-        document.removeEventListener('click', handleUserInteraction);
-        document.removeEventListener('touchstart', handleUserInteraction);
+        document.removeEventListener("click", handleUserInteraction);
+        document.removeEventListener("touchstart", handleUserInteraction);
       };
-      
-      document.addEventListener('click', handleUserInteraction);
-      document.addEventListener('touchstart', handleUserInteraction);
-      
+
+      document.addEventListener("click", handleUserInteraction);
+      document.addEventListener("touchstart", handleUserInteraction);
+
       return () => {
-        document.removeEventListener('click', handleUserInteraction);
-        document.removeEventListener('touchstart', handleUserInteraction);
+        document.removeEventListener("click", handleUserInteraction);
+        document.removeEventListener("touchstart", handleUserInteraction);
       };
     }
   }, [isClient]);
@@ -182,7 +185,7 @@ export default function Home() {
 
   // Load prompt from URL params on component mount and auto-generate
   useEffect(() => {
-    const urlPrompt = searchParams.get('prompt');
+    const urlPrompt = searchParams.get("prompt");
     if (urlPrompt) {
       setPrompt(urlPrompt);
       // Auto-generate if prompt is provided from intro page
@@ -200,13 +203,13 @@ export default function Home() {
             },
             body: JSON.stringify({ prompt: urlPrompt.trim() }),
           })
-            .then(response => {
+            .then((response) => {
               if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
               }
               return response.json();
             })
-            .then(result => {
+            .then((result) => {
               setGenerateResult(result);
               if (result.status === "success") {
                 loadPathData();
@@ -214,9 +217,13 @@ export default function Home() {
                 setError(result.message || "Generation failed");
               }
             })
-            .catch(err => {
+            .catch((err) => {
               console.error("Error generating pattern:", err);
-              setError(err instanceof Error ? err.message : "Failed to generate pattern");
+              setError(
+                err instanceof Error
+                  ? err.message
+                  : "Failed to generate pattern"
+              );
             })
             .finally(() => {
               setIsGenerating(false);
@@ -232,20 +239,20 @@ export default function Home() {
 
     const generateParticles = () => {
       const newParticles = [];
-      
+
       // Large floating particles (20 total)
       for (let i = 0; i < 20; i++) {
         newParticles.push({
           id: i,
-          type: 'large' as const,
+          type: "large" as const,
           style: {
             left: `${Math.random() * 100}%`,
             top: `${Math.random() * 100}%`,
             width: `${4 + Math.random() * 8}px`,
             height: `${4 + Math.random() * 8}px`,
             animationDelay: `${Math.random() * 6}s`,
-            animationDuration: `${4 + Math.random() * 4}s`
-          }
+            animationDuration: `${4 + Math.random() * 4}s`,
+          },
         });
       }
 
@@ -253,7 +260,7 @@ export default function Home() {
       for (let i = 20; i < 70; i++) {
         newParticles.push({
           id: i,
-          type: 'small' as const,
+          type: "small" as const,
           style: {
             left: `${Math.random() * 100}%`,
             top: `${Math.random() * 100}%`,
@@ -261,8 +268,8 @@ export default function Home() {
             height: `${1 + Math.random() * 3}px`,
             animationDelay: `${Math.random() * 5}s`,
             animationDuration: `${1 + Math.random() * 3}s`,
-            opacity: Math.random() * 0.8 + 0.2
-          }
+            opacity: Math.random() * 0.8 + 0.2,
+          },
         });
       }
 
@@ -270,16 +277,18 @@ export default function Home() {
       for (let i = 70; i < 80; i++) {
         newParticles.push({
           id: i,
-          type: 'glow' as const,
+          type: "glow" as const,
           style: {
             left: `${Math.random() * 100}%`,
             top: `${Math.random() * 100}%`,
             width: `${8 + Math.random() * 16}px`,
             height: `${8 + Math.random() * 16}px`,
-            background: `radial-gradient(circle, rgba(59, 130, 246, ${0.3 + Math.random() * 0.5}) 0%, transparent 70%)`,
+            background: `radial-gradient(circle, rgba(59, 130, 246, ${
+              0.3 + Math.random() * 0.5
+            }) 0%, transparent 70%)`,
             animationDelay: `${Math.random() * 4}s`,
-            animationDuration: `${3 + Math.random() * 3}s`
-          }
+            animationDuration: `${3 + Math.random() * 3}s`,
+          },
         });
       }
 
@@ -304,14 +313,20 @@ export default function Home() {
         >
           <source src="/background-video.webm" type="video/mp4" />
         </video>
-        
+
         {/* Animated background fallback when no video is loaded */}
         <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 opacity-30">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.3),transparent_50%)] animate-pulse" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(139,69,194,0.4),transparent_50%)] animate-pulse" style={{animationDelay: '1s'}} />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(59,130,246,0.3),transparent_50%)] animate-pulse" style={{animationDelay: '2s'}} />
+          <div
+            className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(139,69,194,0.4),transparent_50%)] animate-pulse"
+            style={{ animationDelay: "1s" }}
+          />
+          <div
+            className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(59,130,246,0.3),transparent_50%)] animate-pulse"
+            style={{ animationDelay: "2s" }}
+          />
         </div>
-        
+
         {/* Overlay for better text readability */}
         <div className="absolute inset-0 bg-black bg-opacity-20" />
       </div>
@@ -323,11 +338,11 @@ export default function Home() {
             <div
               key={particle.id}
               className={`absolute ${
-                particle.type === 'large' 
+                particle.type === "large"
                   ? `${styles.particle} ${styles.float}`
-                  : particle.type === 'small' 
-                    ? 'bg-blue-300 rounded-full animate-pulse' 
-                    : `rounded-full ${styles.customPulse}`
+                  : particle.type === "small"
+                  ? "bg-blue-300 rounded-full animate-pulse"
+                  : `rounded-full ${styles.customPulse}`
               }`}
               style={particle.style}
             />
@@ -341,7 +356,9 @@ export default function Home() {
         <div className="w-80 backdrop-blur-xl bg-white/5 border-r border-white/20 flex flex-col shadow-2xl">
           {/* Header */}
           <div className="p-4 border-b border-white/20 backdrop-blur-sm bg-white/2">
-            <h1 className={`text-xl font-bold text-white mb-1 drop-shadow-lg ${styles.textGlow}`}>
+            <h1
+              className={`text-xl font-bold text-white mb-1 drop-shadow-lg ${styles.textGlow}`}
+            >
               NanoWorks
             </h1>
             <p className="text-sm text-white">Vibe out 3D DNA structures</p>
@@ -350,8 +367,12 @@ export default function Home() {
           {/* Controls */}
           <div className="flex-1 p-4 space-y-6 overflow-y-auto">
             {/* Generate Section */}
-            <div className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainer}`}>
-              <h2 className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}>
+            <div
+              className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainer}`}
+            >
+              <h2
+                className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}
+              >
                 Generate
               </h2>
               <div className="space-y-3">
@@ -398,8 +419,12 @@ export default function Home() {
             </div>
 
             {/* Controls Section */}
-            <div className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainer}`}>
-              <h2 className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}>
+            <div
+              className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainer}`}
+            >
+              <h2
+                className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}
+              >
                 Controls
               </h2>
               <div className="space-y-3">
@@ -422,14 +447,18 @@ export default function Home() {
             </div>
 
             {/* Controls Help */}
-            <div className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainer}`}>
-              <h2 className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}>
+            <div
+              className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg ${styles.glassContainer}`}
+            >
+              <h2
+                className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}
+              >
                 Navigation
               </h2>
               <div className="text-xs text-white/70 space-y-1">
                 <div>
-                  <strong className="text-white/90">Rotate:</strong> Left click +
-                  drag
+                  <strong className="text-white/90">Rotate:</strong> Left click
+                  + drag
                 </div>
                 <div>
                   <strong className="text-white/90">Pan:</strong> Right click +
@@ -457,15 +486,21 @@ export default function Home() {
         {/* Main 3D Visualization Area */}
         <div className="flex-1 relative">
           <div className="absolute inset-0 p-4">
-            <div className={`h-full w-full backdrop-blur-xl bg-white/2 rounded-lg border border-white/20 relative overflow-hidden shadow-2xl ${styles.glassContainer}`}>
+            <div
+              className={`h-full w-full backdrop-blur-xl bg-white/2 rounded-lg border border-white/20 relative overflow-hidden shadow-2xl ${styles.glassContainer}`}
+            >
               <div id="dna-container" className="w-full h-full"></div>
 
               {/* Info and Legend Overlay - Top Right */}
               <div className="absolute top-4 right-4 space-y-4 max-w-xs">
                 {/* Info Section */}
-                <div className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}>
+                <div
+                  className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}
+                >
                   <div className="flex items-center justify-between mb-3">
-                    <h2 className={`text-lg font-semibold text-white drop-shadow-md ${styles.holographicText}`}>
+                    <h2
+                      className={`text-lg font-semibold text-white drop-shadow-md ${styles.holographicText}`}
+                    >
                       Info
                     </h2>
                     <button
@@ -513,9 +548,13 @@ export default function Home() {
                 </div>
 
                 {/* Legend */}
-                <div className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}>
+                <div
+                  className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}
+                >
                   <div className="flex items-center justify-between mb-3">
-                    <h2 className={`text-lg font-semibold text-white drop-shadow-md ${styles.holographicText}`}>
+                    <h2
+                      className={`text-lg font-semibold text-white drop-shadow-md ${styles.holographicText}`}
+                    >
                       Legend
                     </h2>
                     <button
@@ -542,166 +581,174 @@ export default function Home() {
                       </svg>
                     </button>
                   </div>
+                  <div
+                    className={`overflow-hidden transition-all duration-300 ${
+                      isLegendCollapsed
+                        ? "max-h-0 opacity-0"
+                        : "max-h-96 opacity-100"
+                    }`}
+                  >
+                    <div className="space-y-2 text-sm">
+                      <div className="text-white/70 font-medium mb-2">
+                        Regular Nucleotides:
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-red-500 rounded shadow-lg border border-white/20"></div>
+                        <span className="text-white/80">Adenine</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-blue-500 rounded shadow-lg border border-white/20"></div>
+                        <span className="text-white/80">Thymine</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-green-500 rounded shadow-lg border border-white/20"></div>
+                        <span className="text-white/80">Cytosine</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-yellow-500 rounded shadow-lg border border-white/20"></div>
+                        <span className="text-white/80">Guanine</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-white/20 border border-white/40 rounded shadow-lg backdrop-blur-sm"></div>
+                        <span className="text-white/80">Sugar Backbone</span>
+                      </div>
+
+                      <div className="text-white/70 font-medium mb-2 mt-4">
+                        Collision Branches:
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-pink-500 rounded shadow-lg border border-white/20"></div>
+                        <span className="text-white/80">
+                          DNA Scaffolding (A,T,C,G)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Nucleotide Statistics */}
                 <div
-                  className={`overflow-hidden transition-all duration-300 ${
-                    isLegendCollapsed
-                      ? "max-h-0 opacity-0"
-                      : "max-h-96 opacity-100"
-                  }`}
+                  className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}
                 >
-                  <div className="space-y-2 text-sm">
+                  <h2
+                    className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}
+                  >
+                    Statistics
+                  </h2>
+                  <div className="space-y-3 text-sm">
                     <div className="text-white/70 font-medium mb-2">
-                      Regular Nucleotides:
+                      Main Snake Path:
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-red-500 rounded shadow-lg border border-white/20"></div>
-                      <span className="text-white/80">Adenine</span>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-red-500/20 p-2 rounded border border-red-400/30">
+                        <span className="text-red-200">A:</span>
+                        <span className="text-white font-medium">
+                          {nucleotideStats.mainSnake.A}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-blue-500/20 p-2 rounded border border-blue-400/30">
+                        <span className="text-blue-200">T:</span>
+                        <span className="text-white font-medium">
+                          {nucleotideStats.mainSnake.T}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-green-500/20 p-2 rounded border border-green-400/30">
+                        <span className="text-green-200">C:</span>
+                        <span className="text-white font-medium">
+                          {nucleotideStats.mainSnake.C}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-yellow-500/20 p-2 rounded border border-yellow-400/30">
+                        <span className="text-yellow-200">G:</span>
+                        <span className="text-white font-medium">
+                          {nucleotideStats.mainSnake.G}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-blue-500 rounded shadow-lg border border-white/20"></div>
-                      <span className="text-white/80">Thymine</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-green-500 rounded shadow-lg border border-white/20"></div>
-                      <span className="text-white/80">Cytosine</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-yellow-500 rounded shadow-lg border border-white/20"></div>
-                      <span className="text-white/80">Guanine</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-white/20 border border-white/40 rounded shadow-lg backdrop-blur-sm"></div>
-                      <span className="text-white/80">Sugar Backbone</span>
+                    <div className="text-white/60 text-xs text-center">
+                      Total: {nucleotideStats.mainSnake.total}
                     </div>
 
                     <div className="text-white/70 font-medium mb-2 mt-4">
                       Collision Branches:
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-pink-500 rounded shadow-lg border border-white/20"></div>
-                      <span className="text-white/80">
-                        DNA Scaffolding (A,T,C,G)
-                      </span>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-red-500/20 p-2 rounded border border-red-400/30">
+                        <span className="text-red-200">A:</span>
+                        <span className="text-white font-medium">
+                          {nucleotideStats.collisionBranches.A}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-blue-500/20 p-2 rounded border border-blue-400/30">
+                        <span className="text-blue-200">T:</span>
+                        <span className="text-white font-medium">
+                          {nucleotideStats.collisionBranches.T}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-green-500/20 p-2 rounded border border-green-400/30">
+                        <span className="text-green-200">C:</span>
+                        <span className="text-white font-medium">
+                          {nucleotideStats.collisionBranches.C}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-yellow-500/20 p-2 rounded border border-yellow-400/30">
+                        <span className="text-yellow-200">G:</span>
+                        <span className="text-white font-medium">
+                          {nucleotideStats.collisionBranches.G}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-white/60 text-xs text-center">
+                      Total: {nucleotideStats.collisionBranches.total}
                     </div>
                   </div>
                 </div>
-              </div>
-
-                {/* Nucleotide Statistics */}
-                <div className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}>
-                  <h2 className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}>
-                    Statistics
-                  </h2>
-                <div className="space-y-3 text-sm">
-                  <div className="text-white/70 font-medium mb-2">
-                    Main Snake Path:
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-red-500/20 p-2 rounded border border-red-400/30">
-                      <span className="text-red-200">A:</span>
-                      <span className="text-white font-medium">
-                        {nucleotideStats.mainSnake.A}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-blue-500/20 p-2 rounded border border-blue-400/30">
-                      <span className="text-blue-200">T:</span>
-                      <span className="text-white font-medium">
-                        {nucleotideStats.mainSnake.T}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-green-500/20 p-2 rounded border border-green-400/30">
-                      <span className="text-green-200">C:</span>
-                      <span className="text-white font-medium">
-                        {nucleotideStats.mainSnake.C}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-yellow-500/20 p-2 rounded border border-yellow-400/30">
-                      <span className="text-yellow-200">G:</span>
-                      <span className="text-white font-medium">
-                        {nucleotideStats.mainSnake.G}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-white/60 text-xs text-center">
-                    Total: {nucleotideStats.mainSnake.total}
-                  </div>
-
-                  <div className="text-white/70 font-medium mb-2 mt-4">
-                    Collision Branches:
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-red-500/20 p-2 rounded border border-red-400/30">
-                      <span className="text-red-200">A:</span>
-                      <span className="text-white font-medium">
-                        {nucleotideStats.collisionBranches.A}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-blue-500/20 p-2 rounded border border-blue-400/30">
-                      <span className="text-blue-200">T:</span>
-                      <span className="text-white font-medium">
-                        {nucleotideStats.collisionBranches.T}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-green-500/20 p-2 rounded border border-green-400/30">
-                      <span className="text-green-200">C:</span>
-                      <span className="text-white font-medium">
-                        {nucleotideStats.collisionBranches.C}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-yellow-500/20 p-2 rounded border border-yellow-400/30">
-                      <span className="text-yellow-200">G:</span>
-                      <span className="text-white font-medium">
-                        {nucleotideStats.collisionBranches.G}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-white/60 text-xs text-center">
-                    Total: {nucleotideStats.collisionBranches.total}
-                  </div>
-                </div>
-              </div>
 
                 {/* Hover Information */}
                 {hoverInfo && (
-                  <div className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}>
-                    <h2 className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}>
+                  <div
+                    className={`backdrop-blur-md bg-white/2 p-4 rounded-xl border border-white/10 shadow-lg transition-all duration-300 ${styles.glassContainer}`}
+                  >
+                    <h2
+                      className={`text-lg font-semibold text-white mb-3 drop-shadow-md ${styles.holographicText}`}
+                    >
                       Hovered Nucleotide
                     </h2>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
-                      <span className="text-white/70">Type:</span>
-                      <span className="text-white font-medium">
-                        {hoverInfo.baseType === 1
-                          ? "Adenine (A)"
-                          : hoverInfo.baseType === 2
-                          ? "Thymine (T)"
-                          : hoverInfo.baseType === 3
-                          ? "Cytosine (C)"
-                          : hoverInfo.baseType === 4
-                          ? "Guanine (G)"
-                          : "Unknown"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
-                      <span className="text-white/70">Category:</span>
-                      <span className="text-white font-medium">
-                        {hoverInfo.category === "main_snake"
-                          ? "Main Snake"
-                          : "Collision Branch"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
-                      <span className="text-white/70">Position:</span>
-                      <span className="text-white font-medium">
-                        ({hoverInfo.position.row}, {hoverInfo.position.col})
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
-                      <span className="text-white/70">Value:</span>
-                      <span className="text-white font-medium">
-                        {hoverInfo.nucleotideType}
-                      </span>
-                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
+                        <span className="text-white/70">Type:</span>
+                        <span className="text-white font-medium">
+                          {hoverInfo.baseType === 1
+                            ? "Adenine (A)"
+                            : hoverInfo.baseType === 2
+                            ? "Thymine (T)"
+                            : hoverInfo.baseType === 3
+                            ? "Cytosine (C)"
+                            : hoverInfo.baseType === 4
+                            ? "Guanine (G)"
+                            : "Unknown"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
+                        <span className="text-white/70">Category:</span>
+                        <span className="text-white font-medium">
+                          {hoverInfo.category === "main_snake"
+                            ? "Main Snake"
+                            : "Collision Branch"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
+                        <span className="text-white/70">Position:</span>
+                        <span className="text-white font-medium">
+                          ({hoverInfo.position.row}, {hoverInfo.position.col})
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between backdrop-blur-sm bg-white/5 p-2 rounded border border-white/20">
+                        <span className="text-white/70">Value:</span>
+                        <span className="text-white font-medium">
+                          {hoverInfo.nucleotideType}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -710,10 +757,14 @@ export default function Home() {
               {/* Loading overlay */}
               {(isLoading || isGenerating) && (
                 <div className="absolute inset-0 backdrop-blur-sm bg-black/20 flex items-center justify-center">
-                  <div className={`backdrop-blur-md bg-white/5 p-4 rounded-lg border border-white/20 shadow-2xl ${styles.glassContainer}`}>
+                  <div
+                    className={`backdrop-blur-md bg-white/5 p-4 rounded-lg border border-white/20 shadow-2xl ${styles.glassContainer}`}
+                  >
                     <div className="text-white text-center">
                       <div className="animate-spin w-8 h-8 border-2 border-blue-500/50 border-t-blue-500 rounded-full mx-auto mb-2"></div>
-                      <div className={styles.holographicText}>{isGenerating ? "Generating..." : "Loading..."}</div>
+                      <div className={styles.holographicText}>
+                        {isGenerating ? "Generating..." : "Loading..."}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -722,9 +773,13 @@ export default function Home() {
               {/* Empty state */}
               {!isLoading && !isGenerating && dnaArray.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className={`text-center text-white/80 backdrop-blur-md bg-white/2 p-8 rounded-xl border border-white/20 shadow-2xl ${styles.glassContainer}`}>
+                  <div
+                    className={`text-center text-white/80 backdrop-blur-md bg-white/2 p-8 rounded-xl border border-white/20 shadow-2xl ${styles.glassContainer}`}
+                  >
                     <div className="text-6xl mb-4 drop-shadow-lg">🧬</div>
-                    <div className={`text-xl mb-2 drop-shadow-md ${styles.holographicText}`}>
+                    <div
+                      className={`text-xl mb-2 drop-shadow-md ${styles.holographicText}`}
+                    >
                       No DNA Structure Loaded
                     </div>
                     <div className="text-sm text-white/60">

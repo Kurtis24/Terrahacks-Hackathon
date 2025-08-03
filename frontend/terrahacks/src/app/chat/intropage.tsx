@@ -1,14 +1,19 @@
 'use client';
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import styles from './intropage.module.css';
 
 const IntroPage = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentSection, setCurrentSection] = useState(0);
+  const [prevSection, setPrevSection] = useState(0);
   const [hasInitiallyPlayed, setHasInitiallyPlayed] = useState(false);
   const [isInitialPlaying, setIsInitialPlaying] = useState(false);
+  const [isSectionPlaying, setIsSectionPlaying] = useState(false);
+  const [scrollDirection, setScrollDirection] = useState<'up' | 'down'>('down');
+  const [lastScrollY, setLastScrollY] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [particles, setParticles] = useState<Array<{
     id: number;
     type: 'large' | 'small' | 'glow';
@@ -54,6 +59,83 @@ const IntroPage = () => {
     }
   ];
 
+  // Initial video autoplay logic - moved outside to be accessible
+  const handleVideoLoad = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || hasInitiallyPlayed) return;
+
+    try {
+      console.log('Video loaded! Duration:', video.duration);
+      console.log('Video source:', video.currentSrc);
+      console.log('Video ready state:', video.readyState);
+      
+      // Start playing the video for 2 seconds, then pause
+      if (video.paused) {
+        setIsInitialPlaying(true);
+        video.currentTime = 0;
+        video.playbackRate = 1;
+        await video.play();
+        console.log('Initial video playing for 2 seconds...');
+        
+        // After 2 seconds, pause the video
+        setTimeout(() => {
+          video.pause();
+          setIsInitialPlaying(false);
+          setHasInitiallyPlayed(true);
+          console.log('Initial video paused after 2 seconds');
+        }, 2000);
+      }
+
+    } catch (error) {
+      console.log('Initial video play failed:', error);
+      setIsInitialPlaying(false);
+      setHasInitiallyPlayed(true);
+    }
+  }, [hasInitiallyPlayed]);
+
+  // Handle section changes with fade effects and video play
+  const handleSectionChange = useCallback(async (newSection: number, direction: 'up' | 'down') => {
+    if (isTransitioning) return;
+    
+    setIsTransitioning(true);
+    setPrevSection(currentSection);
+    setCurrentSection(newSection);
+    
+    const video = videoRef.current;
+    if (!video) {
+      setIsTransitioning(false);
+      return;
+    }
+    
+    try {
+      // Start section transition with fade and video play
+      setIsSectionPlaying(true);
+      
+      // Set video to section start time
+      const sectionProgress = newSection / (sections.length - 1);
+      const sectionStartTime = sectionProgress * video.duration;
+      video.currentTime = sectionStartTime;
+      video.playbackRate = 1;
+      
+      // Play video for 2 seconds
+      await video.play();
+      console.log(`Section ${newSection}: Playing video for 2 seconds`);
+      
+      // After 2 seconds, pause and enable scroll control
+      setTimeout(() => {
+        video.pause();
+        setIsSectionPlaying(false);
+        setIsTransitioning(false);
+        console.log(`Section ${newSection}: Video paused, scroll control enabled`);
+      }, 2000);
+      
+    } catch (error) {
+      console.log('Section video play failed:', error);
+      setIsSectionPlaying(false);
+      setIsTransitioning(false);
+    }
+  }, [isTransitioning, currentSection, sections.length]);
+
   useEffect(() => {
     const handleScroll = () => {
       if (!containerRef.current || !videoRef.current) return;
@@ -62,75 +144,59 @@ const IntroPage = () => {
       const windowHeight = window.innerHeight;
       const documentHeight = document.documentElement.scrollHeight - windowHeight;
       
+      // Detect scroll direction
+      const direction = scrollTop > lastScrollY ? 'down' : 'up';
+      setScrollDirection(direction);
+      setLastScrollY(scrollTop);
+      
       // Calculate scroll progress (0 to 1)
       const scrollProgress = Math.min(scrollTop / documentHeight, 1);
       
-      // Map scroll progress to video duration
-      const video = videoRef.current;
-      if (video.duration && hasInitiallyPlayed) {
-        const targetTime = scrollProgress * video.duration;
-        video.currentTime = targetTime;
-      }
-
       // Determine current section
       const sectionIndex = Math.floor(scrollProgress * sections.length);
-      setCurrentSection(Math.min(sectionIndex, sections.length - 1));
-    };
-
-    // Initial video autoplay logic
-    const handleVideoLoad = async () => {
+      const newSection = Math.min(sectionIndex, sections.length - 1);
+      
+      // Check if section changed
+      if (newSection !== currentSection && !isTransitioning) {
+        handleSectionChange(newSection, direction);
+      }
+      
+      // Map scroll progress to video duration with directional control
       const video = videoRef.current;
-      if (!video || hasInitiallyPlayed) return;
-
-      try {
-        console.log('Video duration:', video.duration);
+      if (video.duration && !isSectionPlaying && !isInitialPlaying) {
+        const targetTime = scrollProgress * video.duration;
         
-        // Small delay before starting for smooth loading
-        setTimeout(async () => {
-          try {
-            // Play video for 2 seconds then pause
-            setIsInitialPlaying(true);
-            await video.play();
-            console.log('Video started playing...');
-            
-            // Set timeout to pause after 2 seconds with smooth transition
-            setTimeout(() => {
-              // Fade effect before pausing
-              video.style.transition = 'opacity 0.5s ease-in-out';
-              video.style.opacity = '0.9';
-              
-              setTimeout(() => {
-                video.pause();
-                console.log('Video paused after 2 seconds');
-                setIsInitialPlaying(false);
-                setHasInitiallyPlayed(true);
-                
-                // Restore opacity
-                setTimeout(() => {
-                  video.style.opacity = '1';
-                }, 300);
-              }, 200);
-            }, 2000);
-          } catch (playError) {
-            console.log('Play failed:', playError);
-            setIsInitialPlaying(false);
-            setHasInitiallyPlayed(true);
+        // Set video time based on scroll position
+        video.currentTime = targetTime;
+        
+        if (direction === 'down') {
+          // Normal forward playback
+          if (video.paused) {
+            video.play().catch(e => console.log('Auto-play prevented:', e));
           }
-        }, 500);
-
-      } catch (error) {
-        console.log('Autoplay failed (browser policy):', error);
-        // If autoplay fails, just enable scroll control
-        setIsInitialPlaying(false);
-        setHasInitiallyPlayed(true);
+          video.playbackRate = 1;
+        } else {
+          // For reverse scroll, we'll use a more reliable approach
+          // Keep the video paused and just update currentTime
+          video.pause();
+          // The currentTime is already set above based on scroll position
+          // This gives the effect of reverse playback by scrubbing backwards
+        }
       }
     };
 
     // Set up video event listeners
     const video = videoRef.current;
     if (video) {
+      console.log('Setting up video event listeners...');
       video.addEventListener('loadedmetadata', handleVideoLoad);
       video.addEventListener('canplay', handleVideoLoad);
+      video.addEventListener('error', (e) => {
+        console.error('Video error:', e);
+        console.error('Video error details:', video.error);
+      });
+      video.addEventListener('loadstart', () => console.log('Video load started'));
+      video.addEventListener('loadeddata', () => console.log('Video data loaded'));
     }
 
     window.addEventListener('scroll', handleScroll);
@@ -142,12 +208,43 @@ const IntroPage = () => {
         video.removeEventListener('canplay', handleVideoLoad);
       }
     };
-  }, [hasInitiallyPlayed, isInitialPlaying]);
+  }, [hasInitiallyPlayed, isInitialPlaying, currentSection, lastScrollY, isTransitioning, isSectionPlaying, handleVideoLoad, handleSectionChange]);
 
   // Client-side only flag to prevent hydration issues
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // User interaction fallback for autoplay restrictions
+  useEffect(() => {
+    if (!isClient) return;
+    
+    const handleUserInteraction = () => {
+      const video = videoRef.current;
+      if (video && !hasInitiallyPlayed) {
+        handleVideoLoad();
+      }
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+    
+    document.addEventListener('click', handleUserInteraction);
+    document.addEventListener('touchstart', handleUserInteraction);
+    document.addEventListener('keydown', handleUserInteraction);
+    
+    // Also try to load video immediately
+    const video = videoRef.current;
+    if (video && video.readyState >= 1) {
+      handleVideoLoad();
+    }
+    
+    return () => {
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+  }, [isClient, hasInitiallyPlayed, handleVideoLoad]);
 
   // Generate particles only on client side
   useEffect(() => {
@@ -215,41 +312,47 @@ const IntroPage = () => {
   return (
     <div ref={containerRef} className="relative">
       {/* Fixed Video Background */}
-      <div className="fixed inset-0 w-full h-full z-0">
+      <div className="fixed inset-0 w-full h-full z-[-1]">
         <video
           ref={videoRef}
           className="w-full h-full object-cover"
           muted
           playsInline
-          preload="auto"
-          poster="/api/placeholder/1920/1080"
+          preload="metadata"
+          loop
+          controls={false}
         >
-          {/* Replace with your actual video source */}
-          <source src="/your-video.mp4" type="video/mp4" />
+          {/* Your background video */}
+          <source src="/background-video.mp4" type="video/mp4" />
           {/* Fallback for browsers that don't support video */}
         </video>
         
-        {/* Animated background fallback when no video is loaded */}
-        <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 opacity-70">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.3),transparent_50%)] animate-pulse" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(139,69,194,0.4),transparent_50%)] animate-pulse" style={{animationDelay: '1s'}} />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(59,130,246,0.3),transparent_50%)] animate-pulse" style={{animationDelay: '2s'}} />
-        </div>
+        {/* Light overlay for better text readability */}
+        <div className="absolute inset-0 bg-black bg-opacity-15" />
         
-        {/* Overlay for better text readability */}
-        <div className="absolute inset-0 bg-black bg-opacity-40" />
-        
-        {/* Initial Play Indicator */}
-        {isInitialPlaying && (
+        {/* Video Playing Indicators */}
+        {(isInitialPlaying || isSectionPlaying) && (
           <div className={`absolute top-8 left-8 z-20 ${styles.initialPlayIndicator}`}>
             <div className="flex items-center space-x-3 bg-black/50 backdrop-blur-sm rounded-full px-4 py-2">
               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              <span className="text-white text-sm font-medium">Playing...</span>
+              <span className="text-white text-sm font-medium">
+                {isInitialPlaying ? 'Starting...' : 'Section Playing...'}
+              </span>
               <div className="w-8 h-1 bg-white/20 rounded-full overflow-hidden">
                 <div 
                   className={`h-full bg-red-500 rounded-full ${styles.progressBarFill}`}
                 />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section Transition Indicator */}
+        {isTransitioning && (
+          <div className={`absolute top-20 left-8 z-20 ${styles.videoPlayingIndicator}`}>
+            <div className="flex items-center space-x-2 text-white/80 text-sm">
+              <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse" />
+              <span>Section {currentSection + 1}</span>
             </div>
           </div>
         )}
@@ -278,7 +381,13 @@ const IntroPage = () => {
           <section
             key={section.id}
             id={`section-${index}`}
-            className="min-h-screen flex items-center justify-start px-8 md:px-16 lg:px-24 relative"
+            className={`min-h-screen flex items-center justify-start px-8 md:px-16 lg:px-24 relative ${styles.sectionSnap} ${
+              currentSection === index 
+                ? styles.sectionFadeIn 
+                : currentSection !== prevSection && prevSection === index
+                ? styles.sectionFadeOut
+                : ''
+            }`}
           >
             {/* Section background overlay for better text contrast */}
             <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-transparent" />

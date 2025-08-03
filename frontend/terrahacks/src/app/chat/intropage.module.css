@@ -45,9 +45,21 @@
   animation: float 3s ease-in-out infinite;
 }
 
-/* Smooth scroll behavior */
+/* Smooth scroll behavior with snap */
 html {
   scroll-behavior: smooth;
+  scroll-snap-type: y mandatory;
+}
+
+/* Section snap points */
+.sectionSnap {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.section-snap {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 /* Video overlay gradients */
@@ -210,6 +222,69 @@ html {
   }
   50% {
     transform: translateY(-10px);
+  }
+}
+
+/* Section fade transitions */
+.sectionFadeIn {
+  animation: sectionFadeIn 1s ease-out forwards;
+}
+
+.sectionFadeOut {
+  animation: sectionFadeOut 0.5s ease-in forwards;
+}
+
+.section-fade-in {
+  animation: sectionFadeIn 1s ease-out forwards;
+}
+
+.section-fade-out {
+  animation: sectionFadeOut 0.5s ease-in forwards;
+}
+
+@keyframes sectionFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sectionFadeOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0.3;
+    transform: translateY(-10px) scale(0.98);
+  }
+}
+
+/* Video play indicator */
+.videoPlayingIndicator {
+  animation: pulseGlow 2s ease-in-out;
+}
+
+.video-playing-indicator {
+  animation: pulseGlow 2s ease-in-out;
+}
+
+@keyframes pulseGlow {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
   }
 }
 

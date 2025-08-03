@@ -3,12 +3,85 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 export function renderSingleStrandDNA(
   dnaArray: number[][],
-  containerId: string
-) {
-  // Clear existing content
+  containerId: string,
+  onHover?: (
+    hoverInfo: {
+      nucleotideType: number;
+      baseType: number;
+      isDoubleDNA: boolean;
+      position: { row: number; col: number };
+      category: "main_snake" | "collision_branch";
+    } | null
+  ) => void
+): {
+  cleanup: () => void;
+  stats: {
+    mainSnake: { A: number; T: number; C: number; G: number; total: number };
+    collisionBranches: {
+      A: number;
+      T: number;
+      C: number;
+      G: number;
+      total: number;
+    };
+  };
+} {
+  // Clear existing content and dispose of previous Three.js objects
   const container = document.getElementById(containerId);
-  if (!container) return;
-  container.innerHTML = "";
+  if (!container)
+    return {
+      cleanup: () => {},
+      stats: {
+        mainSnake: { A: 0, T: 0, C: 0, G: 0, total: 0 },
+        collisionBranches: { A: 0, T: 0, C: 0, G: 0, total: 0 },
+      },
+    };
+
+  // Initialize nucleotide statistics
+  const stats = {
+    mainSnake: { A: 0, T: 0, C: 0, G: 0, total: 0 },
+    collisionBranches: { A: 0, T: 0, C: 0, G: 0, total: 0 },
+  };
+
+  // Helper function to get nucleotide name
+  const getNucleotideName = (baseType: number): "A" | "T" | "C" | "G" => {
+    switch (baseType) {
+      case 1:
+        return "A"; // Adenine
+      case 2:
+        return "T"; // Thymine
+      case 3:
+        return "C"; // Cytosine
+      case 4:
+        return "G"; // Guanine
+      default:
+        return "A";
+    }
+  };
+
+  // Helper function to update stats
+  const updateStats = (baseType: number, isDoubleDNA: boolean) => {
+    const nucleotideName = getNucleotideName(baseType);
+    const category = isDoubleDNA ? stats.collisionBranches : stats.mainSnake;
+    category[nucleotideName]++;
+    category.total++;
+  };
+
+  // Clean up any existing Three.js content
+  while (container.firstChild) {
+    const child = container.firstChild as HTMLElement;
+    // If it's a canvas element from Three.js, clean it up properly
+    if (child instanceof HTMLCanvasElement) {
+      const renderer = (
+        child as HTMLCanvasElement & { __three_renderer?: THREE.WebGLRenderer }
+      ).__three_renderer;
+      if (renderer) {
+        renderer.dispose();
+        renderer.forceContextLoss();
+      }
+    }
+    container.removeChild(child);
+  }
 
   // Scene setup
   const scene = new THREE.Scene();
@@ -22,6 +95,13 @@ export function renderSingleStrandDNA(
     antialias: true,
     powerPreference: "high-performance", // Prefer high performance GPU
   });
+
+  // Store renderer reference for cleanup
+  (
+    renderer.domElement as HTMLCanvasElement & {
+      __three_renderer?: THREE.WebGLRenderer;
+    }
+  ).__three_renderer = renderer;
 
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.appendChild(renderer.domElement);
@@ -53,6 +133,22 @@ export function renderSingleStrandDNA(
   const thymineMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff }); // Blue for thymine
   const cytosineMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); // Green for cytosine
   const guanineMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 }); // Yellow for guanine
+
+  // Store all materials for cleanup
+  const allMaterials = [
+    sugarMaterial,
+    pinkSugarMaterial,
+    connectionMaterial,
+    pinkConnectionMaterial,
+    basePairMaterial,
+    adenineMaterial,
+    thymineMaterial,
+    cytosineMaterial,
+    guanineMaterial,
+  ];
+
+  // Store all geometries for cleanup
+  const allGeometries = [sugarGeometry, baseGeometry, connectionGeometry];
 
   const dnaStrand = new THREE.Object3D();
   const holder = new THREE.Object3D();
@@ -109,6 +205,24 @@ export function renderSingleStrandDNA(
         isDoubleDNA ? pinkSugarMaterial : sugarMaterial
       );
       nucleotideGroup.add(sugar);
+
+      // Update nucleotide statistics
+      updateStats(baseType, isDoubleDNA);
+
+      // Add hover functionality to the sugar backbone
+      const hoverInfo = {
+        nucleotideType,
+        baseType,
+        isDoubleDNA,
+        position: { row, col },
+        category: isDoubleDNA
+          ? ("collision_branch" as const)
+          : ("main_snake" as const),
+      };
+
+      // Add mouse event listeners for hover
+      sugar.userData = hoverInfo;
+      nucleotideGroup.userData = hoverInfo;
 
       // Generate wave-based rotation speeds for synchronized wave effect
       const rotationSpeed = {
@@ -554,18 +668,182 @@ export function renderSingleStrandDNA(
   holder.add(dnaStrand);
   scene.add(holder);
 
-  // Reset camera position and controls to center on the DNA structure
-  camera.position.set(0, 0, 20); // Updated from 35 to 20
+  // Calculate camera position to frame middle 150x150 area
+  const frameSize = 150; // Target frame size in grid units
+  const unitSpacing = 6; // Spacing between nucleotides
+  const worldFrameSize = frameSize * unitSpacing; // 900 world units
+
+  // Calculate camera distance needed to frame the target area
+  const fov = camera.fov * (Math.PI / 180); // Convert to radians
+  const cameraDistance = worldFrameSize / 2 / Math.tan(fov / 2);
+
+  // Reset camera position and controls to center on the middle 150x150 area
+  camera.position.set(0, 0, Math.max(cameraDistance, 35)); // Ensure minimum distance
   controls.target.set(0, 0, 0);
   controls.update();
 
-  // Animation loop (optimized for performance)
+  // Animation loop (optimized for performance and memory usage)
   let lastTime = 0;
+  let animationId: number;
   const targetFPS = 60;
   const frameInterval = 1000 / targetFPS;
+  let isVisible = true;
+  let isSpinning = false; // Track spinning state
+
+  // Reduce frame rate when page is not visible
+  const handleVisibilityChange = () => {
+    isVisible = !document.hidden;
+  };
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+
+  // Add double-click event listener to toggle spinning
+  const handleDoubleClick = () => {
+    isSpinning = !isSpinning;
+  };
+
+  // Mouse hover detection using raycasting
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  let currentHoveredObject: THREE.Object3D | null = null;
+
+  const handleMouseMove = (event: MouseEvent) => {
+    if (!container) return;
+
+    console.log("Mouse move event detected");
+
+    // Calculate mouse position in normalized device coordinates (-1 to +1)
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    console.log("Mouse position:", mouse.x, mouse.y);
+
+    // Update the raycaster with the camera and mouse position
+    raycaster.setFromCamera(mouse, camera);
+
+    // Calculate objects intersecting the ray
+    const intersects = raycaster.intersectObjects(scene.children, true);
+
+    console.log("Mouse move detected, intersects:", intersects.length);
+
+    let newHoveredObject: THREE.Object3D | null = null;
+
+    // Find the first intersected object that has hover data
+    for (const intersect of intersects) {
+      let obj = intersect.object;
+      console.log("Checking object:", obj.type, obj.userData);
+      // Check the object and its parent for userData
+      while (obj) {
+        if (obj.userData && obj.userData.nucleotideType) {
+          console.log("Found nucleotide object:", obj.userData);
+          newHoveredObject = obj;
+          break;
+        }
+        obj = obj.parent as THREE.Object3D;
+      }
+      if (newHoveredObject) break;
+    }
+
+    // If hover changed, update the callback
+    if (newHoveredObject !== currentHoveredObject) {
+      console.log(
+        "Hover changed:",
+        currentHoveredObject,
+        "->",
+        newHoveredObject
+      );
+      currentHoveredObject = newHoveredObject;
+
+      if (onHover) {
+        if (currentHoveredObject && currentHoveredObject.userData) {
+          const userData = currentHoveredObject.userData;
+          console.log("Calling onHover with:", userData);
+          // Type check the userData to ensure it has the expected structure
+          if (
+            typeof userData.nucleotideType === "number" &&
+            typeof userData.baseType === "number" &&
+            typeof userData.isDoubleDNA === "boolean" &&
+            userData.position &&
+            typeof userData.position.row === "number" &&
+            typeof userData.position.col === "number" &&
+            (userData.category === "main_snake" ||
+              userData.category === "collision_branch")
+          ) {
+            onHover(
+              userData as {
+                nucleotideType: number;
+                baseType: number;
+                isDoubleDNA: boolean;
+                position: { row: number; col: number };
+                category: "main_snake" | "collision_branch";
+              }
+            );
+          } else {
+            console.log("userData type check failed");
+            onHover(null);
+          }
+        } else {
+          console.log("No userData, calling onHover(null)");
+          onHover(null);
+        }
+      } else {
+        console.log("onHover callback not provided");
+      }
+    }
+  };
+
+  const handleMouseLeave = () => {
+    console.log("Mouse leave detected");
+    if (currentHoveredObject) {
+      currentHoveredObject = null;
+      if (onHover) {
+        onHover(null);
+      }
+    }
+  };
+
+  // Add event listeners to the canvas element, not just the renderer.domElement
+  const canvas = renderer.domElement;
+  canvas.addEventListener("mousemove", handleMouseMove, false);
+  canvas.addEventListener("mouseleave", handleMouseLeave, false);
+  canvas.addEventListener("dblclick", handleDoubleClick);
+
+  console.log("Event listeners added to canvas:", canvas);
+
+  // Keyboard navigation
+  const keyState = {
+    ArrowUp: false,
+    ArrowDown: false,
+    ArrowLeft: false,
+    ArrowRight: false,
+    Shift: false,
+  };
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.code in keyState) {
+      keyState[event.code as keyof typeof keyState] = true;
+      event.preventDefault();
+    }
+  };
+
+  const handleKeyUp = (event: KeyboardEvent) => {
+    if (event.code in keyState) {
+      keyState[event.code as keyof typeof keyState] = false;
+      event.preventDefault();
+    }
+  };
+
+  // Add keyboard event listeners
+  window.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("keyup", handleKeyUp);
 
   function animate(currentTime: number = 0) {
-    requestAnimationFrame(animate);
+    animationId = requestAnimationFrame(animate);
+
+    // Skip animation if page is not visible to save CPU/GPU
+    if (!isVisible) {
+      return;
+    }
 
     // Throttle to target FPS for consistent performance
     if (currentTime - lastTime < frameInterval) {
@@ -575,6 +853,78 @@ export function renderSingleStrandDNA(
 
     // Get current time for wave animation (calculate once)
     const time = currentTime * TIME_SCALE;
+
+    // Add slow spinning rotation to the entire DNA strand (shawarma effect) - only if spinning is enabled
+    if (isSpinning) {
+      dnaStrand.rotation.y += 0.1; // Adjust speed as needed (0.01 = slow, 0.02 = faster)
+    }
+
+    // Handle keyboard navigation
+    const panSpeed = 2;
+    const zoomSpeed = 2;
+    const rotateSpeed = 1;
+
+    if (keyState.Shift) {
+      // Shift modifier: zoom and rotate
+      if (keyState.ArrowUp) {
+        // Zoom in
+        camera.position.multiplyScalar(1 - zoomSpeed * 0.01);
+      }
+      if (keyState.ArrowDown) {
+        // Zoom out
+        camera.position.multiplyScalar(1 + zoomSpeed * 0.01);
+      }
+      if (keyState.ArrowLeft) {
+        // Rotate left around target
+        const spherical = new THREE.Spherical();
+        spherical.setFromVector3(camera.position.clone().sub(controls.target));
+        spherical.theta += rotateSpeed;
+        camera.position.copy(
+          new THREE.Vector3().setFromSpherical(spherical).add(controls.target)
+        );
+        camera.lookAt(controls.target);
+      }
+      if (keyState.ArrowRight) {
+        // Rotate right around target
+        const spherical = new THREE.Spherical();
+        spherical.setFromVector3(camera.position.clone().sub(controls.target));
+        spherical.theta -= rotateSpeed;
+        camera.position.copy(
+          new THREE.Vector3().setFromSpherical(spherical).add(controls.target)
+        );
+        camera.lookAt(controls.target);
+      }
+    } else {
+      // Normal mode: pan
+      const cameraRight = new THREE.Vector3();
+      const cameraUp = new THREE.Vector3();
+
+      // Get camera's right and up vectors for proper panning
+      camera.getWorldDirection(new THREE.Vector3()); // Update camera matrix
+      cameraRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+      cameraUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+
+      if (keyState.ArrowUp) {
+        // Pan up
+        camera.position.add(cameraUp.clone().multiplyScalar(panSpeed));
+        controls.target.add(cameraUp.clone().multiplyScalar(panSpeed));
+      }
+      if (keyState.ArrowDown) {
+        // Pan down
+        camera.position.add(cameraUp.clone().multiplyScalar(-panSpeed));
+        controls.target.add(cameraUp.clone().multiplyScalar(-panSpeed));
+      }
+      if (keyState.ArrowLeft) {
+        // Pan left
+        camera.position.add(cameraRight.clone().multiplyScalar(-panSpeed));
+        controls.target.add(cameraRight.clone().multiplyScalar(-panSpeed));
+      }
+      if (keyState.ArrowRight) {
+        // Pan right
+        camera.position.add(cameraRight.clone().multiplyScalar(panSpeed));
+        controls.target.add(cameraRight.clone().multiplyScalar(panSpeed));
+      }
+    }
 
     // Apply synchronized wave rotation and position to each nucleotide
     for (let i = 0; i < nucleotideData.length; i++) {
@@ -627,9 +977,67 @@ export function renderSingleStrandDNA(
 
   window.addEventListener("resize", handleResize);
 
-  return () => {
+  // Enhanced cleanup function to prevent memory leaks
+  const cleanup = () => {
+    // Cancel animation frame
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+    }
+
+    // Remove event listeners
     window.removeEventListener("resize", handleResize);
-    controls.dispose(); // Clean up controls
-    container.innerHTML = "";
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    canvas.removeEventListener("dblclick", handleDoubleClick);
+    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("keyup", handleKeyUp);
+    canvas.removeEventListener("mousemove", handleMouseMove);
+    canvas.removeEventListener("mouseleave", handleMouseLeave);
+
+    // Dispose of controls
+    controls.dispose();
+
+    // Dispose of all geometries
+    allGeometries.forEach((geometry) => geometry.dispose());
+
+    // Dispose of all materials
+    allMaterials.forEach((material) => material.dispose());
+
+    // Recursively dispose of all objects in the scene
+    const disposeObject = (obj: THREE.Object3D) => {
+      if (obj instanceof THREE.Mesh) {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((material) => material.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
+      }
+      // Dispose of children
+      while (obj.children.length > 0) {
+        const child = obj.children[0];
+        obj.remove(child);
+        disposeObject(child);
+      }
+    };
+
+    disposeObject(scene);
+
+    // Dispose of renderer
+    renderer.dispose();
+    renderer.forceContextLoss();
+
+    // Clear the container
+    if (container) {
+      container.innerHTML = "";
+    }
+
+    // Force garbage collection hint (if available)
+    if (window.gc) {
+      window.gc();
+    }
   };
+
+  return { cleanup, stats };
 }

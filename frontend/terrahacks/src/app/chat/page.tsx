@@ -24,8 +24,8 @@ export default function Home() {
     null
   );
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [isInfoCollapsed, setIsInfoCollapsed] = useState(false);
-  const [isLegendCollapsed, setIsLegendCollapsed] = useState(false);
+  const [isInfoCollapsed, setIsInfoCollapsed] = useState(true);
+  const [isLegendCollapsed, setIsLegendCollapsed] = useState(true);
   const [hoverInfo, setHoverInfo] = useState<{
     nucleotideType: number;
     baseType: number;

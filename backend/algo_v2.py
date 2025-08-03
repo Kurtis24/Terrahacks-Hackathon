@@ -39,9 +39,9 @@ step_size = 5                 # Step size for snake movement (smaller for more p
 down_pixels = 8                # Pixels to move down during turns
 crossover_spacing = 10          # Distance between crossovers
 
-def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, output_path="line_coordinates.json", target_size=300, pink_branches=None):
+def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, output_path="line_coordinates.json", target_size=300, pink_branches=None, connector_branches=None):
     """
-    Save line coordinates for green, red, and pink lines on a 300x300 pixel grid
+    Save line coordinates for green, red, pink, and cyan lines on a 300x300 pixel grid
     
     Args:
         snake_paths: List of snake paths [left_snake, right_snake]
@@ -50,11 +50,13 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
         output_path: Path to save the JSON file
         target_size: Size of the target grid (default 300x300)
         pink_branches: List of pink branch lines (optional)
+        connector_branches: List of cyan C-shaped connector lines (optional)
     """
-    # Create separate arrays for green (left), red (right), and pink (branch) lines
+    # Create separate arrays for green (left), red (right), pink (branch), and cyan (connector) lines
     green_array = np.zeros((target_size, target_size), dtype=np.uint8)
     red_array = np.zeros((target_size, target_size), dtype=np.uint8)
     pink_array = np.zeros((target_size, target_size), dtype=np.uint8)
+    cyan_array = np.zeros((target_size, target_size), dtype=np.uint8)
     
     # Get the original image dimensions from the first snake path to determine scaling
     if len(snake_paths) > 0 and len(snake_paths[0]) > 0:
@@ -117,9 +119,25 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
                 
                 draw_line_in_array(pink_array, x0_scaled, y0_scaled, x1_scaled, y1_scaled, value=1)
     
+    # Draw cyan C-shaped connector lines
+    if connector_branches:
+        for connector in connector_branches:
+            for i in range(len(connector) - 1):
+                x0, y0 = connector[i]
+                x1, y1 = connector[i + 1]
+                
+                # Scale coordinates to 300x300 grid
+                x0_scaled = int(x0 * scale_x)
+                y0_scaled = int(y0 * scale_y)
+                x1_scaled = int(x1 * scale_x)
+                y1_scaled = int(y1 * scale_y)
+                
+                draw_line_in_array(cyan_array, x0_scaled, y0_scaled, x1_scaled, y1_scaled, value=1)
+    
     # Extract coordinates where lines exist
     combined_snake_coordinates = []
     pink_coordinates = []
+    cyan_coordinates = []
     
     # Find all green line coordinates and add to combined array
     green_y_coords, green_x_coords = np.where(green_array == 1)
@@ -140,13 +158,18 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
     for i in range(len(pink_x_coords)):
         pink_coordinates.append([int(pink_x_coords[i]), int(pink_y_coords[i])])
     
-    # Prepare the simplified JSON data structure
+    # Find all cyan line coordinates (separate from main snake lines)
+    cyan_y_coords, cyan_x_coords = np.where(cyan_array == 1)
+    for i in range(len(cyan_x_coords)):
+        cyan_coordinates.append([int(cyan_x_coords[i]), int(cyan_y_coords[i])])
+    
+    # Prepare the enhanced JSON data structure
     json_data = {
         "metadata": {
             "timestamp": datetime.now().isoformat(),
             "shape_name": shape_name,
             "grid_size": [target_size, target_size],
-            "algorithm_version": "algo_v2_enhanced"
+            "algorithm_version": "algo_v2_enhanced_with_c_connectors"
         },
         "line_coordinates": {
             "snake_lines": {
@@ -161,6 +184,13 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
                 "snake_type": "collision_branches",
                 "total_pixels": len(pink_coordinates),
                 "coordinates": pink_coordinates
+            },
+            "cyan_lines": {
+                "color": "cyan",
+                "snake_type": "c_shaped_connectors",
+                "description": "Random C-shaped connectors throughout the pattern",
+                "total_pixels": len(cyan_coordinates),
+                "coordinates": cyan_coordinates
             }
         },
         "summary": {
@@ -169,7 +199,8 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
             "total_red_pixels": red_count,
             "total_snake_pixels": len(combined_snake_coordinates),
             "total_pink_pixels": len(pink_coordinates),
-            "total_line_pixels": len(combined_snake_coordinates) + len(pink_coordinates)
+            "total_cyan_pixels": len(cyan_coordinates),
+            "total_line_pixels": len(combined_snake_coordinates) + len(pink_coordinates) + len(cyan_coordinates)
         }
     }
     
@@ -180,7 +211,8 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
     print(f"Line coordinates saved to JSON: {output_path}")
     print(f"Combined snake line pixels: {len(combined_snake_coordinates)} (Green: {green_count}, Red: {red_count})")
     print(f"Pink branch pixels: {len(pink_coordinates)}")
-    print(f"Total line pixels on {target_size}x{target_size} grid: {len(combined_snake_coordinates) + len(pink_coordinates)}")
+    print(f"Cyan C-connector pixels: {len(cyan_coordinates)}")
+    print(f"Total line pixels on {target_size}x{target_size} grid: {len(combined_snake_coordinates) + len(pink_coordinates) + len(cyan_coordinates)}")
     
     return json_data
 
@@ -299,6 +331,45 @@ def find_topmost_point(mask):
     center_x = int(np.mean(top_x_coords))
     
     return (center_x, top_y)
+
+def find_bottommost_point(mask):
+    """Find the bottommost point of the shape"""
+    y_coords, x_coords = np.where(mask == 255)
+    if len(y_coords) == 0:
+        return None
+    
+    bottom_y = np.max(y_coords)
+    # Find the center x-coordinate at the bottommost y level
+    bottom_x_coords = x_coords[y_coords == bottom_y]
+    center_x = int(np.mean(bottom_x_coords))
+    
+    return (center_x, bottom_y)
+
+def find_leftmost_point(mask):
+    """Find the leftmost point of the shape"""
+    y_coords, x_coords = np.where(mask == 255)
+    if len(x_coords) == 0:
+        return None
+    
+    left_x = np.min(x_coords)
+    # Find the center y-coordinate at the leftmost x level
+    left_y_coords = y_coords[x_coords == left_x]
+    center_y = int(np.mean(left_y_coords))
+    
+    return (left_x, center_y)
+
+def find_rightmost_point(mask):
+    """Find the rightmost point of the shape"""
+    y_coords, x_coords = np.where(mask == 255)
+    if len(x_coords) == 0:
+        return None
+    
+    right_x = np.max(x_coords)
+    # Find the center y-coordinate at the rightmost x level
+    right_y_coords = y_coords[x_coords == right_x]
+    center_y = int(np.mean(right_y_coords))
+    
+    return (right_x, center_y)
 
 def get_shape_boundaries(mask, y):
     """Get the left and right boundaries of the shape at a given y-coordinate"""
@@ -727,6 +798,10 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True):
     all_pink_branches = left_snake.pink_branches + right_snake.pink_branches
     print(f"🌸 Total pink branches created: {len(all_pink_branches)}")
     
+    # Generate random C-shaped connectors
+    connector_branches = generate_random_connectors(mask, array_shape, scaffold_array)
+    print(f"🔗 Total connector branches created: {len(connector_branches)}")
+    
     if return_array:
         # Add crossovers to the scaffold array
         for path in snake_paths:
@@ -739,14 +814,22 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True):
                         if (0 <= new_x < array_shape[1] and 0 <= new_y < array_shape[0]):
                             scaffold_array[new_y, new_x] = 1
         
-        return snake_paths, scaffold_array, all_pink_branches
+        # Add connector branches to scaffold array
+        for connector in connector_branches:
+            for i in range(len(connector) - 1):
+                x0, y0 = connector[i]
+                x1, y1 = connector[i + 1]
+                draw_line_in_array(scaffold_array, x0, y0, x1, y1, value=1)
+        
+        return snake_paths, scaffold_array, all_pink_branches, connector_branches
     else:
-        return snake_paths, all_pink_branches
+        return snake_paths, all_pink_branches, connector_branches
 
 # For backwards compatibility, create a function that only returns paths
 def generate_snake_pattern_legacy(mask):
     """Legacy function that only returns snake paths (backwards compatible)"""
-    return generate_snake_pattern(mask, return_array=False)
+    snake_paths, all_pink_branches, connector_branches = generate_snake_pattern(mask, return_array=False)
+    return snake_paths
 
 def add_crossovers_to_path(path):
     """Add crossover points along a path"""
@@ -765,6 +848,149 @@ def add_crossovers_to_path(path):
                 crossovers.append((int(crossover_point[0]), int(crossover_point[1])))
     
     return crossovers
+
+import random
+
+def generate_random_connectors(mask, array_shape=(300, 300), scaffold_array=None):
+    """Generate C-shaped connectors positioned throughout the shape.
+
+    Creates connectors in the pattern:
+    ----
+    |
+    ----
+    
+    Randomly facing left (⊏) or right (⊐) with proper 90-degree connections.
+    """
+
+    top = find_topmost_point(mask)
+    bottom = find_bottommost_point(mask)
+    left = find_leftmost_point(mask)
+    right = find_rightmost_point(mask)
+
+    if not all([top, bottom, left, right]):
+        return []
+
+    connectors = []
+    connector_length = 4   # Length of the horizontal arms
+    vertical_length = 4    # Half-height of the vertical arm
+    
+    print("🔗 Generating C-shaped connectors throughout shape...")
+
+    attempts = 0
+    max_attempts = 200
+    target_connectors = 30
+
+    while len(connectors) < target_connectors and attempts < max_attempts:
+        attempts += 1
+
+        # Generate random position within shape bounds
+        center_x = random.randint(left[0] + connector_length + 5, right[0] - connector_length - 5)
+        center_y = random.randint(top[1] + vertical_length + 5, bottom[1] - vertical_length - 5)
+
+        # Ensure the center position is valid
+        if not is_point_in_shape(mask, center_x, center_y):
+            continue
+
+        direction = random.choice(['left', 'right'])  # ⊏ or ⊐
+        connector_points = []
+        valid_connector = True
+
+        # Create a proper C-shaped path with continuous 90-degree turns
+        if direction == 'left':  # ⊏ shape
+            # Start at top-right, go left, then down, then right
+            
+            # Top horizontal arm (right to left)
+            y_top = center_y - vertical_length
+            for dx in range(connector_length, -1, -1):  # Right to left
+                x = center_x + dx
+                y = y_top
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
+            
+            if not valid_connector:
+                continue
+            
+            # Vertical arm (top to bottom, excluding the top point we already added)
+            x_base = center_x
+            for dy in range(-vertical_length + 1, vertical_length + 1):  # Skip first point
+                x = x_base
+                y = center_y + dy
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
+            
+            if not valid_connector:
+                continue
+            
+            # Bottom horizontal arm (left to right, excluding the left point we already added)
+            y_bottom = center_y + vertical_length
+            for dx in range(1, connector_length + 1):  # Skip first point
+                x = center_x + dx
+                y = y_bottom
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
+                    
+        else:  # 'right' - ⊐ shape
+            # Start at top-left, go right, then down, then left
+            
+            # Top horizontal arm (left to right)
+            y_top = center_y - vertical_length
+            for dx in range(-connector_length, 1):  # Left to right
+                x = center_x + dx
+                y = y_top
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
+            
+            if not valid_connector:
+                continue
+            
+            # Vertical arm (top to bottom, excluding the top point we already added)
+            x_base = center_x
+            for dy in range(-vertical_length + 1, vertical_length + 1):  # Skip first point
+                x = x_base
+                y = center_y + dy
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
+            
+            if not valid_connector:
+                continue
+            
+            # Bottom horizontal arm (right to left, excluding the right point we already added)
+            y_bottom = center_y + vertical_length
+            for dx in range(-1, -connector_length - 1, -1):  # Skip first point, go right to left
+                x = center_x + dx
+                y = y_bottom
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and is_point_in_shape(mask, x, y):
+                    connector_points.append((x, y))
+                else:
+                    valid_connector = False
+                    break
+
+        if valid_connector and len(connector_points) >= 8:
+            connectors.append(connector_points)
+            if len(connectors) <= 5:  # Only print first few for debugging
+                print(f"   🔗 Created connector #{len(connectors)} at ({center_x}, {center_y}) "
+                      f"facing {direction} with {len(connector_points)} points")
+
+    print(f"🔗 Generated {len(connectors)} C-shaped connectors total.")
+    return connectors
+
+
+    
 
 def visualize_scaffold_array(scaffold_array, title="Scaffold Pattern Array", save_path=None):
     """
@@ -797,13 +1023,14 @@ def visualize_scaffold_array(scaffold_array, title="Scaffold Pattern Array", sav
     
     return plt.gcf()
 
-def visualize_snake_pattern(mask, snake_paths, output_path="output.png", pink_branches=None):
+def visualize_snake_pattern(mask, snake_paths, output_path="output.png", pink_branches=None, connector_branches=None):
     """Visualize the snake pattern on the shape"""
     # Create colored output image
     result_img = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
     
     colors = [(0, 255, 0), (255, 0, 0)]  # Green for left snake, Red for right snake
     pink_color = (255, 0, 255)  # Pink for branches
+    connector_color = (0, 255, 255)  # Cyan for C-shaped connectors
     
     # Draw snake paths
     for i, path in enumerate(snake_paths):
@@ -860,13 +1087,35 @@ def visualize_snake_pattern(mask, snake_paths, output_path="output.png", pink_br
                     print(f"Warning: Invalid pink branch point format, skipping line {j}")
                     break
     
+    # Draw C-shaped connector lines (cyan color)
+    if connector_branches:
+        for connector in connector_branches:
+            # Draw connector path
+            for j in range(len(connector) - 1):
+                pt1 = connector[j]
+                pt2 = connector[j + 1]
+                
+                # Ensure points are tuples of 2 integers
+                if (isinstance(pt1, (tuple, list)) and len(pt1) == 2 and
+                    isinstance(pt2, (tuple, list)) and len(pt2) == 2):
+                    try:
+                        pt1 = (int(pt1[0]), int(pt1[1]))
+                        pt2 = (int(pt2[0]), int(pt2[1]))
+                        cv2.line(result_img, pt1, pt2, connector_color, 2)  # Same thickness as snake lines
+                    except Exception as e:
+                        print(f"Warning: Error drawing connector line from {pt1} to {pt2}: {e}")
+                        continue
+                else:
+                    print(f"Warning: Invalid connector point format, skipping line {j}")
+                    break
+    
     # Save and display
     cv2.imwrite(output_path, result_img)
     print(f"OpenCV visualization saved to: {output_path}")
     
     plt.figure(figsize=(10, 10))
     plt.imshow(cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB))
-    plt.title("90-Degree Turn Snake Pattern - Continuous Zigzag Fill")
+    plt.title("90-Degree Turn Snake Pattern with C-Shaped Connectors - Continuous Zigzag Fill")
     plt.axis('off')
     
     # Save matplotlib version too
@@ -926,5 +1175,5 @@ if __name__ == "__main__":
     print("\n🧪 Running quick test of algorithm functions...")
     shapes = create_test_shapes()
     mask = shapes['triangle']
-    snake_paths, scaffold_array = generate_snake_pattern(mask, array_shape=(300, 300), return_array=True)
+    snake_paths, scaffold_array, all_pink_branches, connector_branches = generate_snake_pattern(mask, array_shape=(300, 300), return_array=True)
     print(f"✅ Test completed: Generated {len(snake_paths)} paths with {np.sum(scaffold_array)} scaffold pixels") 

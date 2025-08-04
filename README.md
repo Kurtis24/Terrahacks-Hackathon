@@ -6,6 +6,9 @@ Learn more about the project on the [DevPost](https://devpost.com/software/genom
 
 [![Watch the Demo](https://www.youtube.com/embed/N8X2oWvuaNU?si=NZrP0Djri03Pcmmu)](https://www.youtube.com/embed/N8X2oWvuaNU?si=NZrP0Djri03Pcmmu)
 
+[<img src="https://www.youtube.com/embed/N8X2oWvuaNU?si=NZrP0Djri03Pcmmu/hqdefault.jpg" width="600" height="300"
+/>](https://www.youtube.com/embed/N8X2oWvuaNU?si=NZrP0Djri03Pcmmu)
+
 ## Inspiration
 DNA origami is a unique art form just waiting for its canvas. Our initial spark came from Mark Rober’s “world’s smallest Nerf gun,” which creatively introduced the concept of nanoscale design. DNA origami, first pioneered in 2006, remains a relatively untouched yet powerful method for building regenerative tools in nanotechnology. It's a niche field in biomedical design that we felt deserved more exposure. We wanted to open the door to the next generation of biotech AI applications by making this powerful design process accessible to more people.
 

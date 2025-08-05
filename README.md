@@ -1,4 +1,4 @@
-# Terrahacks-Hackathon
+# Terrahacks-Hackathon (deployed version up shortly)
 
 Learn more about the project on the [DevPost](https://devpost.com/software/genomeworks?ref_content=user-portfolio&ref_feature=in_progress).
 

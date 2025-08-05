@@ -60,3 +60,6 @@ coverage/
 *.pem
 *.key
 *.crt
+
+# output files
+outputFiles/

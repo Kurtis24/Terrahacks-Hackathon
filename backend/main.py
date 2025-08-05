@@ -12,6 +12,9 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     print("🐍 RUNNING SNAKE PATTERN ALGORITHM")
     print("="*60)
     
+    # Create outputFiles directory if it doesn't exist
+    os.makedirs("./outputFiles", exist_ok=True)
+    
     # Generate snake pattern with array output
     print("🔄 Generating snake pattern...")
     start_time = time.time()
@@ -20,7 +23,7 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     
     # Create unique filenames with timestamp
     timestamp = int(time.time())
-    output_filename = f"snake_pattern_{shape_name}_{timestamp}.png"
+    output_filename = f"./outputFiles/snake_pattern.png"
     json_filename = f"../frontend/terrahacks/public/path.json"
     
     # Print detailed analysis
@@ -61,7 +64,7 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     print(f"   📊 Total Line Pixels: {json_data['summary']['total_line_pixels']:,}")
     
     # Create scaffold array visualization
-    scaffold_filename = f"scaffold_array_{shape_name}_{timestamp}.png"
+    scaffold_filename = f"./outputFiles/scaffold_array.png"
     scaffold_fig = visualize_scaffold_array(
         scaffold_array, 
         title=f"Scaffold Array - {shape_name.title()}", 
@@ -76,12 +79,12 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     
     return snake_paths, scaffold_array, json_filename, output_filename
 
-def generate_pollinations_image(prompt, output_file="input_shape.png"):
+def generate_pollinations_image(prompt, output_file="./outputFiles/input_shape.png"):
     """
     Generate an image using Pollinations AI and run snake pattern analysis
     """
     encoded_prompt = urllib.parse.quote(prompt)
-    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?/model=flux&nologo=true"
 
     print(f"🧠 Fetching image from: {url}")
     response = requests.get(url)
@@ -163,7 +166,7 @@ def process_test_shape(shape_type="triangle"):
     print(f"✅ Created {shape_type} shape: {mask.shape[1]}x{mask.shape[0]} pixels")
     
     # Save the test shape for reference
-    test_image_path = f"test_{shape_type}_shape.png"
+    test_image_path = f"./outputFiles/test_shape.png"
     cv2.imwrite(test_image_path, mask)
     print(f"💾 Test shape saved as: {test_image_path}")
     

@@ -26,8 +26,8 @@ def generate_pattern(request: GenerateRequest):
     print(f"Prompt: {request.prompt}")
 
     # Generate image and process it
-    generate_pollinations_image(request.prompt, output_file="input_shape.png")
-    result = process_existing_image("input_shape.png")
+    generate_pollinations_image(request.prompt, output_file="./outputFiles/input_shape.png")
+    result = process_existing_image("./outputFiles/input_shape.png")
     
     # Extract only JSON-serializable data from result
     if result and len(result) >= 4:

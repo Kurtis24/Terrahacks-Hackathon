@@ -22,8 +22,8 @@ app.add_middleware(
 @app.post("/generate")
 def generate_pattern(request: GenerateRequest):
     # Generate image and process it
-    generate_pollinations_image(f"Prompt: Generate a white shadow of a {request.prompt} with a black background. The design should be basic and have no details and just one of the and just the requested object/shape, and ensuring all parts are continuously connected and everything is within the border is filled in with the color white. Make it so that it usually starts narrow at the top and widens as it moves down.", output_file="input_shape.png")
-    result = process_existing_image("input_shape.png")
+    generate_pollinations_image(f"Prompt: Generate a white shadow of a {request.prompt} with a black background. The design should be basic and have no details and just one of the and just the requested object/shape, and ensuring all parts are continuously connected and everything is within the border is filled in with the color white. Make it so that it usually starts narrow at the top and widens as it moves down.", output_file="./outputFiles/input_shape.png")
+    result = process_existing_image("./outputFiles/input_shape.png")
     
     # Extract only JSON-serializable data from result
     if result and len(result) >= 4:

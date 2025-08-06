@@ -94,7 +94,18 @@ export function renderSingleStrandDNA(
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
     powerPreference: "high-performance", // Prefer high performance GPU
+    alpha: false, // Disable alpha channel for better performance
+    stencil: false, // Disable stencil buffer if not needed
+    depth: true, // Keep depth buffer for proper rendering
   });
+
+  // PERFORMANCE OPTIMIZATION: Limit pixel ratio to prevent excessive rendering on high-DPI displays
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  
+  // Additional renderer optimizations
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.sortObjects = false; // Disable automatic sorting for better performance
+  renderer.setSize(container.clientWidth, container.clientHeight);
 
   // Store renderer reference for cleanup
   (
@@ -103,7 +114,6 @@ export function renderSingleStrandDNA(
     }
   ).__three_renderer = renderer;
 
-  renderer.setSize(container.clientWidth, container.clientHeight);
   container.appendChild(renderer.domElement);
 
   camera.position.z = 50; // Moved closer from
@@ -120,6 +130,11 @@ export function renderSingleStrandDNA(
   const sugarGeometry = new THREE.SphereGeometry(0.8, 16, 16); // Reduced from 32x32 to 16x16
   const baseGeometry = new THREE.CylinderGeometry(0.4, 0.4, 3, 16); // Reduced from 32 to 16
   const connectionGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1, 8); // Reduced from 16 to 8
+
+  // PERFORMANCE OPTIMIZATION: Level-of-Detail (LOD) geometries for far viewing
+  const lodSugarGeometry = new THREE.SphereGeometry(0.8, 8, 8); // Ultra-low detail for far zoom
+  const lodBaseGeometry = new THREE.CylinderGeometry(0.4, 0.4, 3, 6); // Ultra-low detail
+  const lodConnectionGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1, 4); // Ultra-low detail
 
   // Materials for different nucleotides
   const sugarMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White for sugar
@@ -148,7 +163,7 @@ export function renderSingleStrandDNA(
   ];
 
   // Store all geometries for cleanup
-  const allGeometries = [sugarGeometry, baseGeometry, connectionGeometry];
+  const allGeometries = [sugarGeometry, baseGeometry, connectionGeometry, lodSugarGeometry, lodBaseGeometry, lodConnectionGeometry];
 
   const dnaStrand = new THREE.Object3D();
   const holder = new THREE.Object3D();
@@ -201,7 +216,7 @@ export function renderSingleStrandDNA(
 
       // Create sugar backbone (sphere)
       const sugar = new THREE.Mesh(
-        sugarGeometry,
+        isDoubleDNA ? lodSugarGeometry : sugarGeometry,
         isDoubleDNA ? pinkSugarMaterial : sugarMaterial
       );
       nucleotideGroup.add(sugar);
@@ -681,9 +696,39 @@ export function renderSingleStrandDNA(
   let lastTime = 0;
   let animationId: number;
   const targetFPS = 60;
-  const frameInterval = 1000 / targetFPS;
+  let frameInterval = 1000 / targetFPS;
   let isVisible = true;
   let isSpinning = false; // Track spinning state
+  
+  // PERFORMANCE OPTIMIZATION: Adaptive framerate control
+  let frameCount = 0;
+  let fpsCheckTime = 0;
+  let currentFPS = 60;
+  let adaptiveFrameInterval = frameInterval;
+  
+  const updateAdaptiveFramerate = (currentTime: number) => {
+    frameCount++;
+    if (currentTime - fpsCheckTime >= 1000) { // Check FPS every second
+      currentFPS = frameCount;
+      frameCount = 0;
+      fpsCheckTime = currentTime;
+      
+      // Adjust target framerate based on performance
+      if (currentFPS < 30) {
+        adaptiveFrameInterval = 1000 / 30; // Drop to 30fps
+      } else if (currentFPS < 45) {
+        adaptiveFrameInterval = 1000 / 45; // Drop to 45fps
+      } else {
+        adaptiveFrameInterval = frameInterval; // Back to 60fps
+      }
+    }
+  };
+
+  // Performance optimization: zoom-based animation control
+  const MAX_ZOOM_DISTANCE = 200; // Distance threshold to stop nucleotide animation
+  const MEDIUM_ZOOM_DISTANCE = 100; // Distance threshold to reduce animation quality
+  let shouldAnimateNucleotides = true;
+  let shouldUseHighQualityAnimation = true;
 
   // Reduce frame rate when page is not visible
   const handleVisibilityChange = () => {
@@ -696,30 +741,65 @@ export function renderSingleStrandDNA(
     isSpinning = !isSpinning;
   };
 
-  // Mouse hover detection using raycasting
+  // Mouse hover detection using raycasting (OPTIMIZED)
   const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
   let currentHoveredObject: THREE.Object3D | null = null;
+  
+  // PERFORMANCE OPTIMIZATION: Throttle raycasting to reduce CPU usage
+  let lastRaycastTime = 0;
+  const raycastThrottle = 32; // Only raycast every 32ms (~30fps) instead of every frame
+  let pendingRaycast = false;
 
-  const handleMouseMove = (event: MouseEvent) => {
-    if (!container) return;
+  // Object pooling for reused vectors to reduce garbage collection
+  const tempVector1 = new THREE.Vector3();
+  const tempVector2 = new THREE.Vector3();
+  const tempVector3 = new THREE.Vector3();
+  const tempSpherical = new THREE.Spherical();
 
-    // Calculate mouse position in normalized device coordinates (-1 to +1)
-    const rect = container.getBoundingClientRect();
-    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  // Pre-computed sin/cos lookup tables for better performance
+  const LOOKUP_SIZE = 1024;
+  const sinLookup = new Float32Array(LOOKUP_SIZE);
+  const cosLookup = new Float32Array(LOOKUP_SIZE);
+  for (let i = 0; i < LOOKUP_SIZE; i++) {
+    const angle = (i / LOOKUP_SIZE) * Math.PI * 2;
+    sinLookup[i] = Math.sin(angle);
+    cosLookup[i] = Math.cos(angle);
+  }
 
+  // Fast sin/cos functions using lookup tables
+  const fastSin = (x: number): number => {
+    const index = Math.floor(((x % (Math.PI * 2)) / (Math.PI * 2)) * LOOKUP_SIZE) & (LOOKUP_SIZE - 1);
+    return sinLookup[index];
+  };
+
+  const fastCos = (x: number): number => {
+    const index = Math.floor(((x % (Math.PI * 2)) / (Math.PI * 2)) * LOOKUP_SIZE) & (LOOKUP_SIZE - 1);
+    return cosLookup[index];
+  };
+
+  const performRaycast = () => {
+    if (!container || !pendingRaycast) return;
+    
     // Update the raycaster with the camera and mouse position
     raycaster.setFromCamera(mouse, camera);
 
-    // Calculate objects intersecting the ray
-    const intersects = raycaster.intersectObjects(scene.children, true);
+    // OPTIMIZATION: Only check hover-enabled objects, not all scene children
+    const hoverObjects: THREE.Object3D[] = [];
+    nucleotideData.forEach(nuc => {
+      if (nuc.nucleotideGroup.children.length > 0) {
+        hoverObjects.push(nuc.nucleotideGroup.children[0]); // Only check sugar backbone
+      }
+    });
+
+    // Calculate objects intersecting the ray (much smaller set now)
+    const intersects = raycaster.intersectObjects(hoverObjects, false);
 
     let newHoveredObject: THREE.Object3D | null = null;
 
     // Find the first intersected object that has hover data
-    for (const intersect of intersects) {
-      let obj = intersect.object;
+    if (intersects.length > 0) {
+      let obj = intersects[0].object;
       // Check the object and its parent for userData
       while (obj) {
         if (obj.userData && obj.userData.nucleotideType) {
@@ -728,7 +808,6 @@ export function renderSingleStrandDNA(
         }
         obj = obj.parent as THREE.Object3D;
       }
-      if (newHoveredObject) break;
     }
 
     // If hover changed, update the callback
@@ -765,6 +844,24 @@ export function renderSingleStrandDNA(
           onHover(null);
         }
       }
+    }
+    
+    pendingRaycast = false;
+  };
+
+  const handleMouseMove = (event: MouseEvent) => {
+    if (!container) return;
+
+    // Always update mouse coordinates
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    // PERFORMANCE OPTIMIZATION: Throttle expensive raycasting
+    const currentTime = performance.now();
+    if (currentTime - lastRaycastTime > raycastThrottle) {
+      lastRaycastTime = currentTime;
+      pendingRaycast = true;
     }
   };
 
@@ -818,24 +915,37 @@ export function renderSingleStrandDNA(
       return;
     }
 
-    // Throttle to target FPS for consistent performance
-    if (currentTime - lastTime < frameInterval) {
+    // PERFORMANCE OPTIMIZATION: Use adaptive framerate and update FPS monitoring
+    updateAdaptiveFramerate(currentTime);
+    
+    // Throttle to adaptive FPS for consistent performance
+    if (currentTime - lastTime < adaptiveFrameInterval) {
       return;
     }
     lastTime = currentTime;
 
-    // Get current time for wave animation (calculate once)
-    const time = currentTime * TIME_SCALE;
+    // Performance optimization: Check camera distance for zoom-based animation control
+    const cameraDistance = camera.position.distanceTo(controls.target);
+    shouldAnimateNucleotides = cameraDistance < MAX_ZOOM_DISTANCE;
+    shouldUseHighQualityAnimation = cameraDistance < MEDIUM_ZOOM_DISTANCE;
 
-    // Add slow spinning rotation to the entire DNA strand (shawarma effect) - only if spinning is enabled
-    if (isSpinning) {
-      dnaStrand.rotation.y += 0.1; // Adjust speed as needed (0.01 = slow, 0.02 = faster)
+    // Perform pending raycast if needed (throttled)
+    if (pendingRaycast) {
+      performRaycast();
     }
 
-    // Handle keyboard navigation
+    // Get current time for wave animation (calculate once, only if needed)
+    const time = shouldAnimateNucleotides ? currentTime * TIME_SCALE : 0;
+
+    // OPTIMIZATION: Only update spinning rotation when actually spinning
+    if (isSpinning) {
+      dnaStrand.rotation.y += 0.01; // Reduced from 0.1 for smoother animation
+    }
+
+    // Handle keyboard navigation (OPTIMIZED with object pooling)
     const panSpeed = 2;
     const zoomSpeed = 2;
-    const rotateSpeed = 1;
+    const rotateSpeed = 0.02; // Reduced for smoother rotation
 
     if (keyState.Shift) {
       // Shift modifier: zoom and rotate
@@ -847,91 +957,88 @@ export function renderSingleStrandDNA(
         // Zoom out
         camera.position.multiplyScalar(1 + zoomSpeed * 0.01);
       }
-      if (keyState.ArrowLeft) {
-        // Rotate left around target
-        const spherical = new THREE.Spherical();
-        spherical.setFromVector3(camera.position.clone().sub(controls.target));
-        spherical.theta += rotateSpeed;
-        camera.position.copy(
-          new THREE.Vector3().setFromSpherical(spherical).add(controls.target)
-        );
-        camera.lookAt(controls.target);
-      }
-      if (keyState.ArrowRight) {
-        // Rotate right around target
-        const spherical = new THREE.Spherical();
-        spherical.setFromVector3(camera.position.clone().sub(controls.target));
-        spherical.theta -= rotateSpeed;
-        camera.position.copy(
-          new THREE.Vector3().setFromSpherical(spherical).add(controls.target)
-        );
+      if (keyState.ArrowLeft || keyState.ArrowRight) {
+        // Rotate around target (OPTIMIZED: reuse temp objects)
+        tempSpherical.setFromVector3(tempVector1.copy(camera.position).sub(controls.target));
+        tempSpherical.theta += keyState.ArrowLeft ? rotateSpeed : -rotateSpeed;
+        camera.position.copy(tempVector2.setFromSpherical(tempSpherical).add(controls.target));
         camera.lookAt(controls.target);
       }
     } else {
-      // Normal mode: pan
-      const cameraRight = new THREE.Vector3();
-      const cameraUp = new THREE.Vector3();
+      // Normal mode: pan (OPTIMIZED: reuse temp vectors)
+      if (keyState.ArrowUp || keyState.ArrowDown || keyState.ArrowLeft || keyState.ArrowRight) {
+        // Get camera's right and up vectors for proper panning (reuse temp vectors)
+        camera.getWorldDirection(tempVector1); // Update camera matrix
+        tempVector2.setFromMatrixColumn(camera.matrixWorld, 0).normalize(); // Right
+        tempVector3.setFromMatrixColumn(camera.matrixWorld, 1).normalize(); // Up
 
-      // Get camera's right and up vectors for proper panning
-      camera.getWorldDirection(new THREE.Vector3()); // Update camera matrix
-      cameraRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
-      cameraUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
-
-      if (keyState.ArrowUp) {
-        // Pan up
-        camera.position.add(cameraUp.clone().multiplyScalar(panSpeed));
-        controls.target.add(cameraUp.clone().multiplyScalar(panSpeed));
-      }
-      if (keyState.ArrowDown) {
-        // Pan down
-        camera.position.add(cameraUp.clone().multiplyScalar(-panSpeed));
-        controls.target.add(cameraUp.clone().multiplyScalar(-panSpeed));
-      }
-      if (keyState.ArrowLeft) {
-        // Pan left
-        camera.position.add(cameraRight.clone().multiplyScalar(-panSpeed));
-        controls.target.add(cameraRight.clone().multiplyScalar(-panSpeed));
-      }
-      if (keyState.ArrowRight) {
-        // Pan right
-        camera.position.add(cameraRight.clone().multiplyScalar(panSpeed));
-        controls.target.add(cameraRight.clone().multiplyScalar(panSpeed));
+        if (keyState.ArrowUp) {
+          // Pan up
+          tempVector1.copy(tempVector3).multiplyScalar(panSpeed);
+          camera.position.add(tempVector1);
+          controls.target.add(tempVector1);
+        }
+        if (keyState.ArrowDown) {
+          // Pan down
+          tempVector1.copy(tempVector3).multiplyScalar(-panSpeed);
+          camera.position.add(tempVector1);
+          controls.target.add(tempVector1);
+        }
+        if (keyState.ArrowLeft) {
+          // Pan left
+          tempVector1.copy(tempVector2).multiplyScalar(-panSpeed);
+          camera.position.add(tempVector1);
+          controls.target.add(tempVector1);
+        }
+        if (keyState.ArrowRight) {
+          // Pan right
+          tempVector1.copy(tempVector2).multiplyScalar(panSpeed);
+          camera.position.add(tempVector1);
+          controls.target.add(tempVector1);
+        }
       }
     }
 
-    // Apply synchronized wave rotation and position to each nucleotide
-    for (let i = 0; i < nucleotideData.length; i++) {
-      const nucleotide = nucleotideData[i];
-
-      // Pre-calculate common values
-      const baseWave = time + nucleotide.waveOffset;
-      const sinBase = Math.sin(baseWave);
-      const sinY = Math.sin(baseWave + PHASE_OFFSET_Y);
-      const sinZ = Math.sin(baseWave + PHASE_OFFSET_Z);
-
-      // Apply wave rotation (only if not paired to maintain bonds)
-      if (!nucleotide.isPaired) {
-        nucleotide.nucleotideGroup.rotation.x =
-          sinBase * nucleotide.rotationSpeed.x;
-        nucleotide.nucleotideGroup.rotation.y =
-          sinY * nucleotide.rotationSpeed.y;
-        nucleotide.nucleotideGroup.rotation.z =
-          sinZ * nucleotide.rotationSpeed.z;
+    // Apply synchronized wave rotation and position to each nucleotide (OPTIMIZED)
+    if (shouldAnimateNucleotides && nucleotideData.length > 0) {
+      // OPTIMIZATION: Increase step size based on nucleotide count and zoom level
+      const nucleotideCount = nucleotideData.length;
+      let animationStep = shouldUseHighQualityAnimation ? 1 : 2;
+      
+      // Further optimize for very large DNA structures
+      if (nucleotideCount > 1000) {
+        animationStep = shouldUseHighQualityAnimation ? 3 : 6;
+      } else if (nucleotideCount > 500) {
+        animationStep = shouldUseHighQualityAnimation ? 2 : 4;
       }
+      
+      for (let i = 0; i < nucleotideCount; i += animationStep) {
+        const nucleotide = nucleotideData[i];
 
-      // Apply subtle position movement
-      const posWaveTime = time * WAVE_SPEED + nucleotide.waveOffset;
-      const posX =
-        nucleotide.originalPosition.x +
-        Math.sin(posWaveTime) * POSITION_AMPLITUDE;
-      const posY =
-        nucleotide.originalPosition.y +
-        Math.sin(posWaveTime + PHASE_OFFSET_POS_Y) * POSITION_AMPLITUDE;
-      const posZ =
-        nucleotide.originalPosition.z +
-        Math.sin(posWaveTime + PHASE_OFFSET_POS_Z) * POSITION_AMPLITUDE * 0.5;
+        // OPTIMIZATION: Use fast sin/cos lookups instead of Math.sin
+        const baseWave = time + nucleotide.waveOffset;
+        const sinBase = fastSin(baseWave);
+        const sinY = fastSin(baseWave + PHASE_OFFSET_Y);
+        const sinZ = fastSin(baseWave + PHASE_OFFSET_Z);
 
-      nucleotide.nucleotideGroup.position.set(posX, posY, posZ);
+        // Apply wave rotation (only if not paired to maintain bonds)
+        if (!nucleotide.isPaired) {
+          nucleotide.nucleotideGroup.rotation.x = sinBase * nucleotide.rotationSpeed.x;
+          nucleotide.nucleotideGroup.rotation.y = sinY * nucleotide.rotationSpeed.y;
+          nucleotide.nucleotideGroup.rotation.z = sinZ * nucleotide.rotationSpeed.z;
+        }
+
+        // Apply subtle position movement (reduced amplitude for medium zoom)
+        const positionMultiplier = shouldUseHighQualityAnimation ? 1 : 0.5;
+        const posWaveTime = time * WAVE_SPEED + nucleotide.waveOffset;
+        
+        // OPTIMIZATION: Use fast sin lookups and minimize calculations
+        const posX = nucleotide.originalPosition.x + fastSin(posWaveTime) * POSITION_AMPLITUDE * positionMultiplier;
+        const posY = nucleotide.originalPosition.y + fastSin(posWaveTime + PHASE_OFFSET_POS_Y) * POSITION_AMPLITUDE * positionMultiplier;
+        const posZ = nucleotide.originalPosition.z + fastSin(posWaveTime + PHASE_OFFSET_POS_Z) * POSITION_AMPLITUDE * 0.5 * positionMultiplier;
+
+        nucleotide.nucleotideGroup.position.set(posX, posY, posZ);
+      }
     }
 
     controls.update(); // Update controls for damping

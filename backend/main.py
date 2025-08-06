@@ -18,7 +18,7 @@ def run_snake_pattern_analysis(mask, shape_name="generated_shape"):
     # Generate snake pattern with array output
     print("🔄 Generating snake pattern...")
     start_time = time.time()
-    snake_paths, scaffold_array, pink_branches, connector_branches = generate_snake_pattern(mask, array_shape=(300, 300), return_array=True)
+    snake_paths, scaffold_array, pink_branches, connector_branches = generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, startPoint=None)
     generation_time = time.time() - start_time
     
     # Create unique filenames with timestamp

@@ -36,7 +36,7 @@ import random
 
 # === Parameters ===
 step_size = 5                 # Step size for snake movement (smaller for more precise turns)
-down_pixels = 8                # Pixels to move down during turns
+down_pixels = 10               # Pixels to move down during turns
 crossover_spacing = 10          # Distance between crossovers
 
 def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, output_path="line_coordinates.json", target_size=300, pink_branches=None, connector_branches=None):
@@ -662,13 +662,14 @@ class Snake:
     
     def move_step(self, mask, occupied_points, other_snake=None):
         """Move the snake one step according to its current state"""
-        # Check if we've reached the bottom of the shape or no more shape to fill
-        if self.current_y >= mask.shape[0] - 5:
+        # Check if we've reached the bottom of the shape
+        if self.current_y >= mask.shape[0] - 10:
             return False
             
-        # Check if current line has any shape pixels - if not, end the process
-        if not self.check_line_has_shape(mask, self.current_y):
-            return False
+        # Only check for shape pixels occasionally, not every step
+        if self.current_y % (down_pixels * 3) == 0:  # Check every 3 lines
+            if not self.check_line_has_shape(mask, self.current_y):
+                return False
             
         moved = False
         
@@ -817,6 +818,9 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, star
     all_pink_branches = left_snake.pink_branches + right_snake.pink_branches
     print(f"🌸 Total pink branches created: {len(all_pink_branches)}")
     
+    # Delete every 3rd line to reduce density (temporarily disabled)
+    # snake_paths = delete_every_other_line_simple(snake_paths)
+    
     # Generate random C-shaped connectors
     connector_branches = generate_random_connectors(mask, array_shape, scaffold_array)
     print(f"🔗 Total connector branches created: {len(connector_branches)}")
@@ -841,7 +845,7 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, star
                 draw_line_in_array(scaffold_array, x0, y0, x1, y1, value=1)
 
         # recursivley check for empty space
-        if current_depth < max_recursion_depth:
+        if current_depth < max_recursion_depth:  # Re-enabled with smaller regions
             newStartPoint = findEmptySpace(mask, scaffold_array)
             if not newStartPoint:
                 return snake_paths, scaffold_array, all_pink_branches, connector_branches
@@ -863,7 +867,7 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, star
     else:
         return snake_paths, all_pink_branches, connector_branches
 
-def findEmptySpace(mask, scaffold_array=None, min_region_size=10):
+def findEmptySpace(mask, scaffold_array=None, min_region_size=100):
     """
     Find the next empty space in the shape where we can add more snake lines.
     Scans pixel by pixel to find the first suitable region, rather than finding all regions.
@@ -1087,7 +1091,7 @@ def generate_random_connectors(mask, array_shape=(300, 300), scaffold_array=None
     print(f"   ✅ Found {len(valid_positions)} valid connector positions")
     
     # Limit the number of connectors to avoid overcrowding
-    target_connectors = min(50, len(valid_positions))  # Reduced from 100
+    target_connectors = min(20, len(valid_positions))  # Further reduced from 50
     
     # Randomly sample from valid positions to add variety
     if len(valid_positions) > target_connectors:
@@ -1398,6 +1402,39 @@ def create_test_shapes():
     shapes['circle'] = circle_mask
     
     return shapes
+
+def delete_every_other_line_simple(snake_paths):
+    """
+    Simple function to delete every 3rd horizontal line based on Y-coordinate for better coverage.
+    """
+    if not snake_paths:
+        return snake_paths
+    
+    print(f"🗑️  Deleting every 3rd line for better coverage...")
+    
+    filtered_paths = []
+    
+    for path_idx, path in enumerate(snake_paths):
+        if not path:
+            filtered_paths.append(path)
+            continue
+        
+        # Filter points: keep lines where (Y // down_pixels) % 3 != 0
+        # This removes every 3rd line level (keeps 2 out of every 3 lines)
+        filtered_path = []
+        for x, y in path:
+            line_level = y // down_pixels
+            if line_level % 3 != 0:  # Keep lines at levels 1,2,4,5,7,8... (skip 0,3,6,9...)
+                filtered_path.append((x, y))
+        
+        filtered_paths.append(filtered_path)
+        print(f"   Path {path_idx}: {len(path)} → {len(filtered_path)} points")
+    
+    total_original = sum(len(path) for path in snake_paths)
+    total_filtered = sum(len(path) for path in filtered_paths)
+    print(f"   🎯 Total: {total_original} → {total_filtered} points ({total_original - total_filtered} removed)")
+    
+    return filtered_paths
 
 # === Main Execution (for testing only) ===
 if __name__ == "__main__":

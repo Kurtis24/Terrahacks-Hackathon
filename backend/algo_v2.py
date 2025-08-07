@@ -796,10 +796,60 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, star
         else:
             return [], []
     
-    # Add this starting point to the used starts list
-    used_starts.append(start_point)
-    
     start_x, start_y = start_point
+    print(f"🎯 Starting snake pattern at ({start_x}, {start_y})")
+    
+    # Check if starting point has room to move left and right
+    left_space = 0
+    for x in range(start_x, -1, -1):
+        if is_point_in_shape(mask, x, start_y):
+            left_space += 1
+        else:
+            break
+    
+    right_space = 0
+    for x in range(start_x, mask.shape[1]):
+        if is_point_in_shape(mask, x, start_y):
+            right_space += 1
+        else:
+            break
+    
+    print(f"   📏 Space available: {left_space} pixels left, {right_space} pixels right")
+    
+    if left_space < step_size or right_space < step_size:
+        print(f"   ⚠️  Warning: Starting point too narrow for step_size={step_size}")
+        print(f"   🔍 Looking for wider starting point...")
+        
+        # Try to find a wider starting point lower in the shape
+        for y_offset in range(10, min(100, mask.shape[0] - start_y), 5):
+            test_y = start_y + y_offset
+            if test_y >= mask.shape[0]:
+                break
+                
+            # Find center of shape at this Y level
+            center_x = get_shape_center_x(mask, test_y)
+            if center_x is None:
+                continue
+                
+            # Check space at this level
+            test_left_space = 0
+            for x in range(center_x, -1, -1):
+                if is_point_in_shape(mask, x, test_y):
+                    test_left_space += 1
+                else:
+                    break
+            
+            test_right_space = 0
+            for x in range(center_x, mask.shape[1]):
+                if is_point_in_shape(mask, x, test_y):
+                    test_right_space += 1
+                else:
+                    break
+            
+            if test_left_space >= step_size * 3 and test_right_space >= step_size * 3:
+                start_x, start_y = center_x, test_y
+                print(f"   ✅ Found better starting point at ({start_x}, {start_y}) with {test_left_space} left, {test_right_space} right")
+                break
     
     # Initialize the scaffold array only if requested
     scaffold_array = np.zeros(array_shape, dtype=np.uint8) if return_array else None
@@ -826,6 +876,9 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, star
         iteration += 1
     
     snake_paths = [left_snake.path, right_snake.path]
+    
+    # Add this starting point to the used starts list after snakes complete
+    used_starts.append(start_point)
     
     # Collect all pink branches from both snakes
     all_pink_branches = left_snake.pink_branches + right_snake.pink_branches
@@ -880,7 +933,7 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, star
     else:
         return snake_paths, all_pink_branches, connector_branches
 
-def findEmptySpace(mask, scaffold_array=None, min_region_size=20, used_starts=None, min_distance=20):
+def findEmptySpace(mask, scaffold_array=None, min_region_size=30, used_starts=None, min_distance=30):
     """
     Find the next empty space in the shape where we can add more snake lines.
     Scans pixel by pixel to find the first suitable region, rather than finding all regions.

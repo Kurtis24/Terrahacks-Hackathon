@@ -76,33 +76,37 @@ def save_line_coordinates_to_json(snake_paths, scaffold_array, shape_name, outpu
     
     print(f"   🔍 Scaling factors: x={scale_x:.3f}, y={scale_y:.3f}")
     
-    # Draw green lines (left snake - index 0)
-    if len(snake_paths) > 0:
-        for i in range(len(snake_paths[0]) - 1):
-            x0, y0 = snake_paths[0][i]
-            x1, y1 = snake_paths[0][i + 1]
-            
-            # Scale coordinates to 300x300 grid
-            x0_scaled = int(x0 * scale_x)
-            y0_scaled = int(y0 * scale_y)
-            x1_scaled = int(x1 * scale_x)
-            y1_scaled = int(y1 * scale_y)
-            
-            draw_line_in_array(green_array, x0_scaled, y0_scaled, x1_scaled, y1_scaled, value=1)
+    # Draw green lines (left snake - index 0) and additional recursive left snakes (even indices)
+    for path_idx in range(0, len(snake_paths), 2):  # Process even indices (0, 2, 4, ...)
+        if path_idx < len(snake_paths):
+            path = snake_paths[path_idx]
+            for i in range(len(path) - 1):
+                x0, y0 = path[i]
+                x1, y1 = path[i + 1]
+                
+                # Scale coordinates to 300x300 grid
+                x0_scaled = int(x0 * scale_x)
+                y0_scaled = int(y0 * scale_y)
+                x1_scaled = int(x1 * scale_x)
+                y1_scaled = int(y1 * scale_y)
+                
+                draw_line_in_array(green_array, x0_scaled, y0_scaled, x1_scaled, y1_scaled, value=1)
     
-    # Draw red lines (right snake - index 1)
-    if len(snake_paths) > 1:
-        for i in range(len(snake_paths[1]) - 1):
-            x0, y0 = snake_paths[1][i]
-            x1, y1 = snake_paths[1][i + 1]
-            
-            # Scale coordinates to 300x300 grid
-            x0_scaled = int(x0 * scale_x)
-            y0_scaled = int(y0 * scale_y)
-            x1_scaled = int(x1 * scale_x)
-            y1_scaled = int(y1 * scale_y)
-            
-            draw_line_in_array(red_array, x0_scaled, y0_scaled, x1_scaled, y1_scaled, value=1)
+    # Draw red lines (right snake - index 1) and additional recursive right snakes (odd indices)
+    for path_idx in range(1, len(snake_paths), 2):  # Process odd indices (1, 3, 5, ...)
+        if path_idx < len(snake_paths):
+            path = snake_paths[path_idx]
+            for i in range(len(path) - 1):
+                x0, y0 = path[i]
+                x1, y1 = path[i + 1]
+                
+                # Scale coordinates to 300x300 grid
+                x0_scaled = int(x0 * scale_x)
+                y0_scaled = int(y0 * scale_y)
+                x1_scaled = int(x1 * scale_x)
+                y1_scaled = int(y1 * scale_y)
+                
+                draw_line_in_array(red_array, x0_scaled, y0_scaled, x1_scaled, y1_scaled, value=1)
     
     # Draw pink branch lines
     if pink_branches:
@@ -859,9 +863,10 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, star
     else:
         return snake_paths, all_pink_branches, connector_branches
 
-def findEmptySpace(mask, scaffold_array=None, min_region_size=20):
+def findEmptySpace(mask, scaffold_array=None, min_region_size=10):
     """
     Find the next empty space in the shape where we can add more snake lines.
+    Scans pixel by pixel to find the first suitable region, rather than finding all regions.
     
     Args:
         mask: Binary mask of the shape (255 = inside shape, 0 = outside)
@@ -869,7 +874,7 @@ def findEmptySpace(mask, scaffold_array=None, min_region_size=20):
         min_region_size: Minimum size of empty region to consider (in pixels)
         
     Returns:
-        Single starting point (x, y) for the largest empty region, or None if no suitable region found
+        Single starting point (x, y) for the first suitable empty region, or None if no suitable region found
     """
     if scaffold_array is None:
         return None
@@ -891,40 +896,55 @@ def findEmptySpace(mask, scaffold_array=None, min_region_size=20):
     # Empty areas = inside shape AND no existing lines
     empty_areas = shape_mask & (~line_mask)
     
-    # Use connected components to find distinct empty regions
-    num_labels, labels = cv2.connectedComponents(empty_areas)
+    print(f"🔍 Scanning for empty regions (min size: {min_region_size} pixels)...")
     
-    largest_region_size = 0
-    best_start_point = None
+    # Scan the image from top to bottom, left to right to find the first suitable region
+    visited = np.zeros_like(empty_areas, dtype=bool)
     
-    print(f"🔍 Found {num_labels - 1} empty regions in shape")
-    
-    for label in range(1, num_labels):  # Skip label 0 (background)
-        # Get all pixels belonging to this region
-        region_mask = (labels == label)
-        region_pixels = np.sum(region_mask)
-        
-        if region_pixels >= min_region_size and region_pixels > largest_region_size:
-            # Find the topmost point of this region
-            y_coords, x_coords = np.where(region_mask)
+    for y in range(mask_height):
+        for x in range(mask_width):
+            # Skip if this pixel is not empty or already visited
+            if empty_areas[y, x] == 0 or visited[y, x]:
+                continue
             
-            if len(y_coords) > 0:
-                # Use topmost point as starting point
-                top_y = np.min(y_coords)
-                top_x_coords = x_coords[y_coords == top_y]
+            # Found an unvisited empty pixel - flood fill to measure region size
+            region_pixels = []
+            queue = [(x, y)]
+            visited[y, x] = True
+            
+            while queue:
+                curr_x, curr_y = queue.pop(0)
+                region_pixels.append((curr_x, curr_y))
+                
+                # Check 4-connected neighbors
+                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    new_x, new_y = curr_x + dx, curr_y + dy
+                    
+                    # Check bounds and if pixel is empty and unvisited
+                    if (0 <= new_x < mask_width and 0 <= new_y < mask_height and
+                        not visited[new_y, new_x] and empty_areas[new_y, new_x] == 1):
+                        visited[new_y, new_x] = True
+                        queue.append((new_x, new_y))
+            
+            # Check if this region is large enough
+            region_size = len(region_pixels)
+            if region_size >= min_region_size:
+                # Find the topmost point of this region as starting point
+                region_y_coords = [p[1] for p in region_pixels]
+                region_x_coords = [p[0] for p in region_pixels]
+                
+                top_y = min(region_y_coords)
+                top_x_coords = [x for x, y in region_pixels if y == top_y]
                 center_x = int(np.mean(top_x_coords))
                 
-                largest_region_size = region_pixels
-                best_start_point = (center_x, top_y)
-                
-                print(f"   📍 New largest empty region {label}: {region_pixels} pixels, start at ({center_x}, {top_y})")
-            
-    if best_start_point:
-        print(f"🎯 Selected starting point: {best_start_point} (region size: {largest_region_size} pixels)")
-    else:
-        print(f"🎯 No suitable empty regions found (minimum size: {min_region_size} pixels)")
-        
-    return best_start_point
+                start_point = (center_x, top_y)
+                print(f"✅ Found suitable empty region: {region_size} pixels, start at {start_point}")
+                return start_point
+            else:
+                print(f"   ⚠️  Found small region: {region_size} pixels (too small, need {min_region_size}+)")
+    
+    print(f"🎯 No suitable empty regions found (minimum size: {min_region_size} pixels)")
+    return None
 
 # For backwards compatibility, create a function that only returns paths
 def generate_snake_pattern_legacy(mask):

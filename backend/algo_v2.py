@@ -933,7 +933,7 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, star
     else:
         return snake_paths, all_pink_branches, connector_branches
 
-def findEmptySpace(mask, scaffold_array=None, min_region_size=30, used_starts=None, min_distance=30):
+def findEmptySpace(mask, scaffold_array=None, min_region_size=20, used_starts=None, min_distance=60):
     """
     Find the next empty space in the shape where we can add more snake lines.
     Scans pixel by pixel to find the first suitable region, rather than finding all regions.

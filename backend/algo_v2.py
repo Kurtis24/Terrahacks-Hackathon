@@ -582,7 +582,7 @@ def create_pink_branch(collision_x, collision_y, mask, occupied_points=None):
     return branch_path
 
 class Snake:
-    def __init__(self, start_x, start_y, initial_direction, snake_id, scaffold_array=None, mask=None, array_shape=(300, 300)):
+    def __init__(self, start_x, start_y, initial_direction, snake_id, scaffold_array=None, mask=None, array_shape=(300, 300), is_recursive=False):
         self.path = [(start_x, start_y)]
         self.current_x = start_x
         self.current_y = start_y
@@ -597,6 +597,7 @@ class Snake:
         self.prev_y = start_y
         self.mask = mask  # Reference to the shape mask for branch creation
         self.pink_branches = []  # Store pink branch lines created by this snake
+        self.is_recursive = is_recursive  # Flag to indicate if this is a recursive snake
         
         # Calculate scaling factors for scaffold array
         if self.scaffold_array is not None and mask is not None:
@@ -693,22 +694,27 @@ class Snake:
                     self.update_scaffold_array(self.current_x, self.current_y)
                     moved = True
                 else:
-                    # Collision detected! Create a pink branch at collision point
-                    if self.mask is not None:
-                        branch = create_pink_branch(self.current_x, self.current_y, self.mask, occupied_points)
-                        if branch:
-                            self.pink_branches.append(branch)
-                    
-                    # Start turning sequence after collision
-                    if self.turn_type == "right":
-                        self.turn_90_left()  # If we were turning right, now turn left
-                        self.turn_type = "left"
+                    # Collision detected!
+                    if self.is_recursive:
+                        # Recursive snake: stop to avoid overlapping
+                        return False
                     else:
-                        self.turn_90_right()  # If we were turning left, now turn right
-                        self.turn_type = "right"
-                    
-                    self.state = f"turn_{self.turn_type}_down"
-                    self.down_counter = 0
+                        # Initial snake pair: create pink branch and continue
+                        if self.mask is not None:
+                            branch = create_pink_branch(self.current_x, self.current_y, self.mask, occupied_points)
+                            if branch:
+                                self.pink_branches.append(branch)
+                        
+                        # Start turning sequence after collision
+                        if self.turn_type == "right":
+                            self.turn_90_left()  # If we were turning right, now turn left
+                            self.turn_type = "left"
+                        else:
+                            self.turn_90_right()  # If we were turning left, now turn right
+                            self.turn_type = "right"
+                        
+                        self.state = f"turn_{self.turn_type}_down"
+                        self.down_counter = 0
             else:
                 # Hit shape boundary, start turning sequence
                 if self.turn_type == "right":
@@ -777,8 +783,11 @@ class Snake:
         """Get the last few points of the path for collision detection"""
         return set(self.path[-num_points:])
 
-def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, startPoint=None, max_recursion_depth=3, current_depth=0):
+def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, startPoint=None, max_recursion_depth=3, current_depth=0, used_starts=None):
     """Generate the snake pattern for the given shape mask and optionally return scaffold array"""
+    if used_starts is None:
+        used_starts = []
+    
     # Find starting point
     start_point = startPoint or find_topmost_point(mask)
     if start_point is None:
@@ -787,14 +796,18 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, star
         else:
             return [], []
     
+    # Add this starting point to the used starts list
+    used_starts.append(start_point)
+    
     start_x, start_y = start_point
     
     # Initialize the scaffold array only if requested
     scaffold_array = np.zeros(array_shape, dtype=np.uint8) if return_array else None
     
     # Create two snakes with initial horizontal directions, passing the scaffold array and mask
-    left_snake = Snake(start_x, start_y, -1, "left", scaffold_array if return_array else None, mask, array_shape)
-    right_snake = Snake(start_x, start_y, 1, "right", scaffold_array if return_array else None, mask, array_shape)
+    is_recursive_snake = current_depth > 0  # True if this is a recursive call
+    left_snake = Snake(start_x, start_y, -1, "left", scaffold_array if return_array else None, mask, array_shape, is_recursive_snake)
+    right_snake = Snake(start_x, start_y, 1, "right", scaffold_array if return_array else None, mask, array_shape, is_recursive_snake)
     
     occupied_points = set()
     occupied_points.add((start_x, start_y))
@@ -846,13 +859,13 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, star
 
         # recursivley check for empty space
         if current_depth < max_recursion_depth:  # Re-enabled with smaller regions
-            newStartPoint = findEmptySpace(mask, scaffold_array)
+            newStartPoint = findEmptySpace(mask, scaffold_array, used_starts=used_starts)
             if not newStartPoint:
                 return snake_paths, scaffold_array, all_pink_branches, connector_branches
             
             # Generate additional pattern at the new start point
             additional_paths, additional_scaffold, additional_pink, additional_connectors = generate_snake_pattern(
-                mask, array_shape, return_array=True, startPoint=newStartPoint, max_recursion_depth=max_recursion_depth, current_depth=current_depth + 1
+                mask, array_shape, return_array=True, startPoint=newStartPoint, max_recursion_depth=max_recursion_depth, current_depth=current_depth + 1, used_starts=used_starts
             )
             
             # Merge the results
@@ -867,7 +880,7 @@ def generate_snake_pattern(mask, array_shape=(300, 300), return_array=True, star
     else:
         return snake_paths, all_pink_branches, connector_branches
 
-def findEmptySpace(mask, scaffold_array=None, min_region_size=100):
+def findEmptySpace(mask, scaffold_array=None, min_region_size=20, used_starts=None, min_distance=20):
     """
     Find the next empty space in the shape where we can add more snake lines.
     Scans pixel by pixel to find the first suitable region, rather than finding all regions.
@@ -876,12 +889,17 @@ def findEmptySpace(mask, scaffold_array=None, min_region_size=100):
         mask: Binary mask of the shape (255 = inside shape, 0 = outside)
         scaffold_array: 2D array showing existing lines (1 = line exists, 0 = empty)
         min_region_size: Minimum size of empty region to consider (in pixels)
+        used_starts: List of previously used starting points to avoid
+        min_distance: Minimum distance from previously used starting points
         
     Returns:
         Single starting point (x, y) for the first suitable empty region, or None if no suitable region found
     """
     if scaffold_array is None:
         return None
+    
+    if used_starts is None:
+        used_starts = []
     
     # Scale scaffold array to match mask dimensions
     mask_height, mask_width = mask.shape
@@ -904,13 +922,15 @@ def findEmptySpace(mask, scaffold_array=None, min_region_size=100):
     
     # Scan the image from top to bottom, left to right to find the first suitable region
     visited = np.zeros_like(empty_areas, dtype=bool)
+    regions_found = 0
     
     for y in range(mask_height):
         for x in range(mask_width):
             # Skip if this pixel is not empty or already visited
             if empty_areas[y, x] == 0 or visited[y, x]:
                 continue
-            
+                
+            regions_found += 1
             # Found an unvisited empty pixel - flood fill to measure region size
             region_pixels = []
             queue = [(x, y)]
@@ -942,6 +962,21 @@ def findEmptySpace(mask, scaffold_array=None, min_region_size=100):
                 center_x = int(np.mean(top_x_coords))
                 
                 start_point = (center_x, top_y)
+                
+                # Check if the new start point is too close to any previously used starting point
+                if used_starts:
+                    min_dist_sq = min_distance * min_distance
+                    too_close = False
+                    for used_start in used_starts:
+                        dist_sq = (start_point[0] - used_start[0])**2 + (start_point[1] - used_start[1])**2
+                        if dist_sq < min_dist_sq:
+                            print(f"   ⚠️  Skipping region {regions_found} at ({center_x}, {top_y}) - too close to {used_start} (dist={int(dist_sq**0.5)})")
+                            too_close = True
+                            break
+                    
+                    if too_close:
+                        continue  # Skip this region, continue searching
+                
                 print(f"✅ Found suitable empty region: {region_size} pixels, start at {start_point}")
                 return start_point
             else:
